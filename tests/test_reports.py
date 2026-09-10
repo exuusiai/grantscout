@@ -1,0 +1,38 @@
+from datetime import UTC, datetime
+
+from paperscout.models.schemas import Claim, EvidenceItem, Paper, ResearchState
+from paperscout.reports.renderer import render_html, render_markdown
+
+
+def test_reports_include_traceable_evidence_links() -> None:
+    evidence_id = "paper-1:section:0001:evidence:0000"
+    state = ResearchState(
+        run_id="test-run",
+        question="What improves evidence recall?",
+        finished_at=datetime.now(UTC),
+        selected_papers=[Paper(id="paper-1", title="Evidence Study")],
+        evidence_items=[
+            EvidenceItem(
+                id=evidence_id,
+                paper_id="paper-1",
+                section_id="paper-1:section:0001",
+                text="The method improves evidence recall.",
+            )
+        ],
+        claims=[
+            Claim(
+                id="claim:0000",
+                text="The method improves evidence recall.",
+                evidence_ids=[evidence_id],
+            )
+        ],
+    )
+
+    markdown = render_markdown(state)
+    html = render_html(state)
+
+    assert "## Executive Summary" in markdown
+    assert "## Dataset and Experimental Setup Comparison" in markdown
+    assert "## Open Questions" in markdown
+    assert f'id="evidence-{evidence_id}"' in html
+    assert f'href="#evidence-{evidence_id}"' in html

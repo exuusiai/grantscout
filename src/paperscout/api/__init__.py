@@ -1,0 +1,1 @@
+"""Minimal PaperScout web API."""
