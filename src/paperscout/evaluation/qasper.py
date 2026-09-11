@@ -17,6 +17,7 @@ from paperscout.retrieval.store import CorpusStore
 
 
 ANSWER_TYPES = {"extractive", "free_form", "yes_no", "unanswerable"}
+QASPER_METRICS_VERSION = "2.0"
 YES_NO_QUESTION = re.compile(
     r"^(?:do|does|did|is|are|was|were|can|could|has|have|had|will|would|should)\b",
     re.IGNORECASE,
@@ -90,6 +91,15 @@ def score_qasper_prediction(
         default=0.0,
     )
     type_correct = any(reference["answer_type"] == predicted_type for reference in gold_answers)
+    answer_exact_match = any(
+        _normalize(predicted_answer) == _normalize(reference["answer"])
+        for reference in gold_answers
+    )
+    type_and_answer_correct = any(
+        reference["answer_type"] == predicted_type
+        and _normalize(predicted_answer) == _normalize(reference["answer"])
+        for reference in gold_answers
+    )
     evidence_overlap = len(predicted_evidence & gold_evidence)
     evidence_precision = evidence_overlap / max(len(predicted_evidence), 1)
     evidence_recall = evidence_overlap / max(len(gold_evidence), 1)
@@ -100,7 +110,9 @@ def score_qasper_prediction(
     )
     return {
         "answer_f1": round(answer_f1, 4),
+        "answer_exact_match": answer_exact_match,
         "answer_type_correct": type_correct,
+        "type_and_answer_correct": type_and_answer_correct,
         "gold_answer_types": sorted({item["answer_type"] for item in gold_answers}),
         "evidence_precision": round(evidence_precision, 4),
         "evidence_recall": round(evidence_recall, 4),
@@ -266,7 +278,14 @@ def run_qasper_answer_evaluation(
         completed.get(str(record.get("id"))) or generated_by_id[str(record.get("id"))]
         for record in records
     ]
-    for item in per_query:
+    for record, item in zip(records, per_query, strict=True):
+        item.update(
+            score_qasper_prediction(
+                item["prediction"],
+                record.get("qasper_answer"),
+                [str(value) for value in record.get("relevant_evidence_ids", [])],
+            )
+        )
         if item["error"]:
             failures += 1
         usage_totals.update(
@@ -288,20 +307,31 @@ def run_qasper_answer_evaluation(
     yes_no = [item for item in per_query if "yes_no" in item["gold_answer_types"]]
     unanswerable = [item for item in per_query if "unanswerable" in item["gold_answer_types"]]
     return {
+        "metrics_version": QASPER_METRICS_VERSION,
         "queries": len(per_query),
         "mode": mode,
         "top_k": top_k,
         "workers": max(workers, 1),
         "answer_f1": mean("answer_f1"),
+        "answer_exact_match": round(
+            sum(bool(item["answer_exact_match"]) for item in per_query) / max(len(per_query), 1), 4
+        ),
         "answer_type_accuracy": round(
             sum(bool(item["answer_type_correct"]) for item in per_query) / max(len(per_query), 1), 4
         ),
         "yes_no_accuracy": round(
-            sum(item["answer_f1"] == 1.0 for item in yes_no) / max(len(yes_no), 1), 4
+            sum(bool(item["type_and_answer_correct"]) for item in yes_no)
+            / max(len(yes_no), 1),
+            4,
         ),
         "unanswerable_accuracy": round(
-            sum(item["prediction"]["answer_type"] == "unanswerable" for item in unanswerable)
+            sum(bool(item["type_and_answer_correct"]) for item in unanswerable)
             / max(len(unanswerable), 1),
+            4,
+        ),
+        "type_and_answer_accuracy": round(
+            sum(bool(item["type_and_answer_correct"]) for item in per_query)
+            / max(len(per_query), 1),
             4,
         ),
         "evidence_f1": mean("evidence_f1"),
@@ -322,13 +352,16 @@ def render_qasper_markdown(payload: dict[str, Any]) -> str:
         f"- Queries: {payload['queries']}",
         f"- Retrieval mode: `{payload['mode']}`",
         f"- Top K: {payload['top_k']}",
+        f"- Metrics version: `{payload['metrics_version']}`",
         f"- Model failures: {payload['model_failures']}",
         f"- Duration seconds: {payload['duration_seconds']}",
         "",
         "| Metric | Score |",
         "| --- | ---: |",
         f"| Overall answer F1 | {payload['answer_f1']:.4f} |",
+        f"| Answer exact match | {payload['answer_exact_match']:.4f} |",
         f"| Answer type accuracy | {payload['answer_type_accuracy']:.4f} |",
+        f"| Type and answer accuracy | {payload['type_and_answer_accuracy']:.4f} |",
         f"| Extractive answer F1 | {payload['by_answer_type']['extractive']['answer_f1']:.4f} |",
         f"| Free-form answer F1 | {payload['by_answer_type']['free_form']['answer_f1']:.4f} |",
         f"| Yes/no accuracy | {payload['yes_no_accuracy']:.4f} |",

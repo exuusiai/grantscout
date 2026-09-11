@@ -12,6 +12,29 @@ SciFact SUPPORT/CONTRADICT labels are suitable for the first task. They are not
 ground truth for cross-paper conflict, because they relate one corpus abstract
 to a benchmark claim rather than two PaperScout claims to each other.
 
+## Qasper metric contract
+
+Qasper answer artifacts include `metrics_version`. Version `2.0` separates
+lexical overlap, answer type, and strict correctness:
+
+- `answer_f1` is the maximum token F1 against any annotation.
+- `answer_exact_match` ignores answer type and matches normalized text.
+- `answer_type_accuracy` matches the predicted type against any annotated type.
+- `type_and_answer_accuracy` requires type and text to match the same annotation.
+- `yes_no_accuracy` and `unanswerable_accuracy` use that strict rule on their subsets.
+
+One question may belong to multiple type subsets because Qasper has multiple
+annotators. These subsets are diagnostic views and must not be summed. Version
+1 and version 2 class accuracies are only comparable after rescoring the same
+predictions.
+
+On the 160-question stratified set, increasing generation context from K=5 to
+K=10 raised Evidence F1 from `0.2865` to `0.3316`, but reduced Answer F1 from
+`0.3705` to `0.3536` and increased mean generation latency from `1.1963s` to
+`1.5656s`. The next experiment should retrieve 10 or 20 candidates, rerank or
+compress them to five passages for generation, and compare both fixed-context
+baselines.
+
 ## Recommended validation design
 
 - Draw a stratified sample of at least 300 claim-evidence pairs: supported,
