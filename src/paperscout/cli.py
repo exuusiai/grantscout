@@ -266,7 +266,7 @@ def evaluate_qasper_answers(
     output: Path = typer.Option(
         Path("runs/qasper-answer-evaluation.json"), help="Prediction and score artifact."
     ),
-    top_k: int = typer.Option(5, min=1, max=50, help="Evidence retrieval cutoff."),
+    top_k: int = typer.Option(10, min=1, max=50, help="Evidence retrieval cutoff."),
     mode: str = typer.Option("semantic", help="Retrieval mode: lexical or semantic."),
     limit: int | None = typer.Option(None, min=1, help="Optional smoke-test query limit."),
     workers: int = typer.Option(4, min=1, max=32, help="Concurrent local-model requests."),

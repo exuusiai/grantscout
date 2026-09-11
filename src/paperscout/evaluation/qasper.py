@@ -17,6 +17,10 @@ from paperscout.retrieval.store import CorpusStore
 
 
 ANSWER_TYPES = {"extractive", "free_form", "yes_no", "unanswerable"}
+YES_NO_QUESTION = re.compile(
+    r"^(?:do|does|did|is|are|was|were|can|could|has|have|had|will|would|should)\b",
+    re.IGNORECASE,
+)
 
 
 def _normalize(text: str) -> str:
@@ -37,6 +41,11 @@ def token_f1(prediction: str, reference: str) -> float:
     precision = overlap / len(predicted)
     recall = overlap / len(gold)
     return 2 * precision * recall / (precision + recall)
+
+
+def expected_answer_type(question: str) -> str:
+    """Return a structural type constraint when the question makes it unambiguous."""
+    return "yes_no" if YES_NO_QUESTION.match(question.strip()) else "extractive_or_free_form"
 
 
 def _gold_answers(payload: Any) -> list[dict[str, str]]:
@@ -105,6 +114,7 @@ def _generate_answer(
     evidence: list[Any],
     settings: Settings,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    required_type = expected_answer_type(question)
     response = client.chat(
         messages=[
             {
@@ -113,7 +123,11 @@ def _generate_answer(
                     "Answer the research-paper question using only the supplied evidence. Return "
                     "one JSON object with answer_type (extractive, free_form, yes_no, or "
                     "unanswerable), answer, and evidence_ids. Copy evidence IDs exactly. Use "
-                    "unanswerable when the evidence is insufficient."
+                    "unanswerable only when the supplied evidence cannot answer the question. "
+                    "When required_answer_type is yes_no, answer_type must be yes_no and answer "
+                    "must be exactly yes or no; do not return a sentence. For other answerable "
+                    "questions, use extractive for a short span copied from evidence and free_form "
+                    "only when synthesis is necessary."
                 ),
             },
             {
@@ -121,6 +135,7 @@ def _generate_answer(
                 "content": json.dumps(
                     {
                         "question": question,
+                        "required_answer_type": required_type,
                         "evidence": [
                             {"evidence_id": item.evidence.id, "text": item.evidence.text}
                             for item in evidence

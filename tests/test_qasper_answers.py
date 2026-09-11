@@ -4,6 +4,7 @@ from pathlib import Path
 from paperscout.config import Settings
 from paperscout.evaluation.datasets import ingest_jsonl
 from paperscout.evaluation.qasper import (
+    expected_answer_type,
     persist_qasper_evaluation,
     run_qasper_answer_evaluation,
     score_qasper_prediction,
@@ -26,6 +27,12 @@ class FakeAnswerClient:
             model="fake",
             usage={"prompt_tokens": 10, "completion_tokens": 3},
         )
+
+
+def test_qasper_detects_structural_yes_no_questions() -> None:
+    assert expected_answer_type("Did they use crowdsourcing?") == "yes_no"
+    assert expected_answer_type("Is the result significant?") == "yes_no"
+    assert expected_answer_type("What model was used?") == "extractive_or_free_form"
 
 
 def test_qasper_scores_all_answer_contract_fields() -> None:

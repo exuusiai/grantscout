@@ -74,7 +74,7 @@ Run resume-safe Qasper answer generation and scoring against the local model:
 ```bash
 PAPERSCOUT_VECTOR_INDEX_PATH=data/qasper.bge-small-en-v1.5.auto.index \
 paperscout evaluate-qasper-answers evals/qasper/dev.jsonl \
-  --corpus data/qasper.sqlite --mode semantic --top-k 5 --workers 4 \
+  --corpus data/qasper.sqlite --mode semantic --top-k 10 --workers 4 \
   --checkpoint runs/qasper-answer-predictions.jsonl \
   --output runs/qasper-answer-evaluation.json
 ```
@@ -82,6 +82,11 @@ paperscout evaluate-qasper-answers evals/qasper/dev.jsonl \
 Lexical retrieval uses SQLite FTS5 with automatic index backfill. Environments
 without FTS5 retain the deterministic scan fallback. Evaluation suites reuse a
 loaded semantic model/index across benchmark and ablation stages.
+
+Qasper answer evaluation defaults to `top-k=10` because the paper-constrained
+semantic retrieval audit found evidence recall of 0.6653 at K=10 versus 0.4849
+at K=5. Use K=5 for a lower-context baseline and report the cutoff with every
+answer-quality result.
 
 For semantic retrieval:
 
