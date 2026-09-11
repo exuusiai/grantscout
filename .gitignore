@@ -11,6 +11,6 @@ data/*.index
 data/*.index.meta.json
 data/raw/*
 data/processed/*
-models/
+/models/
 runs/*
 !runs/.gitkeep
