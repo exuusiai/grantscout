@@ -53,4 +53,4 @@ def test_build_scifact_records_maps_labeled_sentence_to_evidence(tmp_path: Path)
 
     assert records[0]["relevant_paper_ids"] == ["42"]
     assert records[0]["relevant_evidence_ids"] == ["42:section:0000:evidence:0000"]
-    assert records[0]["conflict_expected"] is False
+    assert "conflict_expected" not in records[0]

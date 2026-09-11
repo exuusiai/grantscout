@@ -64,11 +64,6 @@ def build_records(
         paper_ids = [str(value) for value in claim.get("cited_doc_ids", [])]
         evidence_ids: list[str] = []
         labels = claim.get("evidence") or {}
-        conflict_expected = any(
-            str(annotation.get("label", "")).upper() == "CONTRADICT"
-            for annotations in labels.values()
-            for annotation in (annotations or [])
-        )
         for paper_id, annotations in labels.items():
             abstract = corpus_records.get(str(paper_id), {}).get("abstract") or []
             for annotation in annotations or []:
@@ -86,7 +81,6 @@ def build_records(
                 "relevant_paper_ids": paper_ids,
                 "relevant_evidence_ids": evidence_ids,
                 "scifact_evidence_labels": labels,
-                "conflict_expected": conflict_expected,
             }
         )
     return output
