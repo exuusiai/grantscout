@@ -114,6 +114,24 @@ specific index (`data/qasper.bge-small-en-v1.5.auto.index`), rather than the
 SciFact index used by the default Web UI. Qasper answer correctness is not
 included in these retrieval metrics.
 
+The source-paper-constrained Qasper answer evaluation completed all 1,005 dev
+questions with Qwen3-8B and no model failures. It finished in 415.714 seconds
+with mean generation latency of 1.5914 seconds:
+
+| Metric | Score |
+| --- | ---: |
+| Overall answer F1 | 0.2519 |
+| Answer type accuracy | 0.5453 |
+| Extractive answer F1 | 0.3222 |
+| Free-form answer F1 | 0.2560 |
+| Yes/no accuracy | 0.0775 |
+| Unanswerable accuracy | 0.3259 |
+| Evidence F1 | 0.3238 |
+
+The evaluator restricts retrieval to the paper associated with each Qasper
+question. This follows the dataset task definition and prevents evidence from
+unrelated papers from contaminating answer scores.
+
 ## SciFact Offline Evaluation Suite
 
 The complete offline suite was run with semantic retrieval and model reasoning
@@ -165,3 +183,14 @@ These are retrieval metrics; claim entailment and human report quality require
 labeled annotations. The single-pass baseline is an offline retrieval-context proxy;
 when a local vLLM endpoint is available, it can be extended with generated-answer
 quality labels without changing the stored retrieval evidence.
+
+The post-FTS SciFact dev run completed in 7.726 seconds. At `K=5`, FTS5/BM25
+achieved Recall=`0.6967`, evidence recall=`0.7685`, and MRR=`0.6043`. The
+optimized semantic suite completed in 101.844 seconds, compared with 633.116
+seconds before semantic-index and baseline-result reuse.
+
+With all 300 SciFact queries carrying conflict labels (64 positive and 236
+negative), the full agent configuration produced citation coverage=`0.9967`,
+audit execution rate=`1.0000`, citation support precision=`0.9967`, conflict
+precision=`0.4000`, conflict recall=`0.0312`, and conflict F1=`0.0580`. The low
+conflict recall is now a measured limitation rather than an unobserved behavior.
