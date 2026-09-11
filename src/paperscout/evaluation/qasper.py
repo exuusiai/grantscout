@@ -188,9 +188,12 @@ def run_qasper_answer_evaluation(
     model_client: OpenAICompatibleClient | None = None,
     workers: int = 4,
     checkpoint_path: Path | None = None,
+    generation_top_k: int | None = None,
 ) -> dict[str, Any]:
     if mode not in {"lexical", "semantic"}:
         raise ValueError("Qasper evaluation mode must be lexical or semantic")
+    if generation_top_k is not None and generation_top_k < 1:
+        raise ValueError("generation_top_k must be positive")
     records = evaluation_records(queries)
     if limit is not None:
         records = records[:limit]
@@ -209,10 +212,22 @@ def run_qasper_answer_evaluation(
     failures = 0
     started_at = time.perf_counter()
     completed: dict[str, dict[str, Any]] = {}
+    effective_generation_top_k = generation_top_k or top_k
     if checkpoint_path is not None and checkpoint_path.exists():
         for line in checkpoint_path.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 item = json.loads(line)
+                checkpoint_config = item.get("evaluation_config")
+                expected_config = {
+                    "mode": mode,
+                    "retrieval_top_k": top_k,
+                    "generation_top_k": effective_generation_top_k,
+                }
+                if checkpoint_config is not None and checkpoint_config != expected_config:
+                    raise ValueError(
+                        f"Checkpoint configuration mismatch: expected {expected_config}, "
+                        f"found {checkpoint_config}"
+                    )
                 completed[str(item["id"])] = item
     prepared: list[tuple[dict[str, Any], list[Any]]] = []
     with CorpusStore(corpus) as store:
@@ -226,6 +241,8 @@ def run_qasper_answer_evaluation(
                 if semantic_index is not None
                 else store.search(question, top_k=top_k, paper_ids=paper_ids or None)
             )
+            if generation_top_k is not None:
+                results = results[:generation_top_k]
             prepared.append((record, results))
 
     def generate(item: tuple[dict[str, Any], list[Any]]) -> dict[str, Any]:
@@ -251,6 +268,11 @@ def run_qasper_answer_evaluation(
         return {
             "id": record.get("id"),
             "query": question,
+            "evaluation_config": {
+                "mode": mode,
+                "retrieval_top_k": top_k,
+                "generation_top_k": effective_generation_top_k,
+            },
             "prediction": prediction,
             **scores,
             "usage": usage,
@@ -311,6 +333,7 @@ def run_qasper_answer_evaluation(
         "queries": len(per_query),
         "mode": mode,
         "top_k": top_k,
+        "generation_top_k": effective_generation_top_k,
         "workers": max(workers, 1),
         "answer_f1": mean("answer_f1"),
         "answer_exact_match": round(
@@ -352,6 +375,7 @@ def render_qasper_markdown(payload: dict[str, Any]) -> str:
         f"- Queries: {payload['queries']}",
         f"- Retrieval mode: `{payload['mode']}`",
         f"- Top K: {payload['top_k']}",
+        f"- Generation Top K: {payload['generation_top_k']}",
         f"- Metrics version: `{payload['metrics_version']}`",
         f"- Model failures: {payload['model_failures']}",
         f"- Duration seconds: {payload['duration_seconds']}",

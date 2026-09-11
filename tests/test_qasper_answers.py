@@ -14,8 +14,12 @@ from paperscout.retrieval.store import CorpusStore
 
 
 class FakeAnswerClient:
+    def __init__(self) -> None:
+        self.evidence_counts: list[int] = []
+
     def chat(self, **kwargs):
         evidence = json.loads(kwargs["messages"][1]["content"])["evidence"]
+        self.evidence_counts.append(len(evidence))
         return ChatResponse(
             content=json.dumps(
                 {
@@ -193,3 +197,50 @@ def test_qasper_resume_recomputes_current_metrics(tmp_path: Path) -> None:
     assert result["answer_exact_match"] == 1.0
     assert result["type_and_answer_accuracy"] == 0.0
     assert result["yes_no_accuracy"] == 0.0
+
+
+def test_qasper_can_retrieve_wider_than_generation_context(tmp_path: Path) -> None:
+    corpus_source = tmp_path / "papers.jsonl"
+    corpus_source.write_text(
+        json.dumps(
+            {
+                "id": "paper-1",
+                "title": "Study",
+                "full_text": {"Results": ["Recall improves.", "Precision improves."]},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    corpus = tmp_path / "corpus.sqlite"
+    with CorpusStore(corpus) as store:
+        ingest_jsonl(corpus_source, store)
+    queries = tmp_path / "queries.jsonl"
+    queries.write_text(
+        json.dumps(
+            {
+                "id": "q1",
+                "query": "recall",
+                "relevant_paper_ids": ["paper-1"],
+                "qasper_answer": [{"answer": {"yes_no": True, "unanswerable": False}}],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    client = FakeAnswerClient()
+
+    result = run_qasper_answer_evaluation(
+        corpus,
+        queries,
+        Settings(runs_dir=tmp_path / "runs"),
+        top_k=2,
+        generation_top_k=1,
+        mode="lexical",
+        model_client=client,
+    )
+
+    assert client.evidence_counts == [1]
+    assert result["top_k"] == 2
+    assert result["generation_top_k"] == 1
+    assert result["per_query"][0]["evaluation_config"]["retrieval_top_k"] == 2
