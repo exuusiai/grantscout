@@ -194,28 +194,38 @@ class CorpusStore:
         ).fetchall()
         return [(self._paper_from_row(row), self._evidence_from_row(row)) for row in rows]
 
-    def search(self, query: str, top_k: int = 10) -> list[SearchResult]:
+    def search(
+        self, query: str, top_k: int = 10, paper_ids: set[str] | None = None
+    ) -> list[SearchResult]:
         query_terms = set(_tokens(query))
         if not query_terms:
             return []
         if self.fts_available:
-            return self._search_fts(query_terms, top_k)
-        return self._search_scan(query, query_terms, top_k)
+            return self._search_fts(query_terms, top_k, paper_ids)
+        return self._search_scan(query, query_terms, top_k, paper_ids)
 
-    def _search_fts(self, query_terms: set[str], top_k: int) -> list[SearchResult]:
+    def _search_fts(
+        self, query_terms: set[str], top_k: int, paper_ids: set[str] | None = None
+    ) -> list[SearchResult]:
         match_query = " OR ".join(f'"{term.replace(chr(34), chr(34) * 2)}"' for term in query_terms)
+        paper_filter = ""
+        parameters: list[object] = [match_query]
+        if paper_ids is not None:
+            paper_filter = f" AND e.paper_id IN ({', '.join('?' for _ in paper_ids)})"
+            parameters.extend(sorted(paper_ids))
+        parameters.append(top_k)
         rows = self.connection.execute(
-            """
+            f"""
             SELECT e.*, p.id AS parent_paper_id, p.title, p.authors_json, p.year,
                    p.abstract, p.source_path, bm25(evidence_fts, 0.0, 0.0, 2.0, 1.0) AS rank
             FROM evidence_fts
             JOIN evidence e ON e.id = evidence_fts.evidence_id
             JOIN papers p ON p.id = e.paper_id
-            WHERE evidence_fts MATCH ?
+            WHERE evidence_fts MATCH ?{paper_filter}
             ORDER BY rank
             LIMIT ?
             """,
-            (match_query, top_k),
+            parameters,
         ).fetchall()
         results: list[SearchResult] = []
         for row in rows:
@@ -233,7 +243,7 @@ class CorpusStore:
         return results
 
     def _search_scan(
-        self, query: str, query_terms: set[str], top_k: int
+        self, query: str, query_terms: set[str], top_k: int, paper_ids: set[str] | None = None
     ) -> list[SearchResult]:
         rows = self.connection.execute(
             """
@@ -243,6 +253,8 @@ class CorpusStore:
         ).fetchall()
         results: list[SearchResult] = []
         for row in rows:
+            if paper_ids is not None and row["paper_id"] not in paper_ids:
+                continue
             haystack = f"{row['title']} {row['text']}".lower()
             matched_terms = sorted(term for term in query_terms if term in haystack)
             if not matched_terms:

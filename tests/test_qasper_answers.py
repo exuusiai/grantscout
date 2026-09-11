@@ -89,3 +89,24 @@ def test_qasper_evaluation_generates_and_filters_evidence_ids(tmp_path: Path) ->
     artifacts = persist_qasper_evaluation(result, tmp_path / "result.json")
     assert Path(artifacts["json"]).is_file()
     assert "Overall answer F1" in Path(artifacts["markdown"]).read_text(encoding="utf-8")
+
+
+def test_qasper_retrieval_is_limited_to_annotated_paper(tmp_path: Path) -> None:
+    source = tmp_path / "papers.jsonl"
+    source.write_text(
+        "\n".join(
+            json.dumps({"id": paper_id, "title": paper_id, "full_text": {"Results": [text]}})
+            for paper_id, text in (
+                ("target", "The target method improves recall."),
+                ("distractor", "The distractor method improves recall."),
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    corpus = tmp_path / "corpus.sqlite"
+    with CorpusStore(corpus) as store:
+        ingest_jsonl(source, store)
+        results = store.search("improves recall", top_k=5, paper_ids={"target"})
+    assert results
+    assert {item.paper.id for item in results} == {"target"}

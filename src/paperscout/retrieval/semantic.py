@@ -99,21 +99,26 @@ class SemanticIndex:
         except (FileNotFoundError, ImportError) as error:
             raise SemanticIndexError(f"Semantic index data does not exist: {self.index_path}") from error
 
-    def search(self, query: str, top_k: int = 10) -> list[SearchResult]:
+    def search(
+        self, query: str, top_k: int = 10, paper_ids: set[str] | None = None
+    ) -> list[SearchResult]:
         if self._index is None:
             self.load()
         query_vector = self._load_model().encode([query], normalize_embeddings=True)
+        search_k = len(self._metadata) if paper_ids is not None else top_k
         if hasattr(self._index, "search"):
-            scores, indices = self._index.search(query_vector, top_k)
+            scores, indices = self._index.search(query_vector, search_k)
             ranked = zip(scores[0].tolist(), indices[0].tolist())
         else:
             scores = self._index @ query_vector[0]
-            ranked = ((float(scores[index]), index) for index in scores.argsort()[::-1][:top_k])
+            ranked = ((float(scores[index]), index) for index in scores.argsort()[::-1][:search_k])
         results: list[SearchResult] = []
         for score, index in ranked:
             if index < 0 or index >= len(self._metadata):
                 continue
             metadata = self._metadata[index]
+            if paper_ids is not None and metadata["evidence"]["paper_id"] not in paper_ids:
+                continue
             from paperscout.models.schemas import EvidenceItem, Paper
 
             results.append(
@@ -124,4 +129,6 @@ class SemanticIndex:
                     matched_terms=[],
                 )
             )
+            if len(results) >= top_k:
+                break
         return results

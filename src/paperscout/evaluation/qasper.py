@@ -193,10 +193,11 @@ def run_qasper_answer_evaluation(
             if str(record.get("id")) in completed:
                 continue
             question = str(record["query"])
+            paper_ids = {str(value) for value in record.get("relevant_paper_ids", [])}
             results = (
-                semantic_index.search(question, top_k=top_k)
+                semantic_index.search(question, top_k=top_k, paper_ids=paper_ids or None)
                 if semantic_index is not None
-                else store.search(question, top_k=top_k)
+                else store.search(question, top_k=top_k, paper_ids=paper_ids or None)
             )
             prepared.append((record, results))
 
