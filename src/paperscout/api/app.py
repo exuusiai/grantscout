@@ -8,19 +8,80 @@ from queue import Queue
 from threading import Thread
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from paperscout.agent.conversation import ConversationMessage, ConversationResult, understand_request
 from paperscout.agent.loop import PaperScoutAgent
 from paperscout.config import Settings, get_settings
+from paperscout.knowledge import KnowledgeService
 from paperscout.reports.renderer import render_html, render_html_fragment, render_markdown
 from paperscout.retrieval.arxiv import ArxivSearchError, search_arxiv
 from paperscout.retrieval.query_interpreter import interpret_query
 from paperscout.retrieval.store import CorpusStore
 
 app = FastAPI(title="PaperScout", version="0.1.0")
+
+
+def _knowledge() -> KnowledgeService:
+    settings = get_settings()
+    if not hasattr(app.state, "knowledge"):
+        app.state.knowledge = KnowledgeService(Path(settings.data_dir) / "knowledge")
+    return app.state.knowledge
+
+
+class ProjectRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+@app.post("/api/projects")
+def create_project(request: ProjectRequest) -> dict:
+    return _knowledge().create_project(request.name)
+
+
+@app.get("/api/projects")
+def list_projects() -> list[dict]:
+    return _knowledge().projects()
+
+
+@app.post("/api/knowledge/upload")
+async def upload_documents(
+    project_id: str = Form(...), files: list[UploadFile] = File(...)
+) -> list[dict]:
+    tasks = []
+    try:
+        for upload in files:
+            tasks.append(_knowledge().enqueue(project_id, upload.filename or "document", await upload.read()))
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Unknown project") from error
+    except ValueError as error:
+        raise HTTPException(status_code=415, detail=str(error)) from error
+    return tasks
+
+
+@app.get("/api/projects/{project_id}/documents")
+def list_documents(project_id: str) -> list[dict]:
+    try:
+        return _knowledge().documents(project_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Unknown project") from error
+
+
+@app.get("/api/knowledge/tasks/{document_id}")
+def document_task(document_id: str) -> dict:
+    try:
+        return _knowledge().document(document_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Unknown document") from error
+
+
+@app.get("/api/projects/{project_id}/export")
+def export_project(project_id: str) -> JSONResponse:
+    try:
+        return JSONResponse(_knowledge().export(project_id), headers={"Content-Disposition": f'attachment; filename="{project_id}.json"'})
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Unknown project") from error
 
 
 class AskRequest(BaseModel):

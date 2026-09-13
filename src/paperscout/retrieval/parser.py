@@ -103,8 +103,10 @@ def parse_document(
     suffix = path.suffix.lower()
     if suffix == ".pdf":
         return _parse_pdf(path, resolved_id, title, year)
+    if suffix == ".pptx":
+        return _parse_pptx(path, resolved_id, title, year)
     if suffix not in {".txt", ".md", ".markdown"}:
-        raise ValueError(f"Unsupported paper format: {suffix}. Use .pdf, .txt, or .md")
+        raise ValueError(f"Unsupported paper format: {suffix}. Use .pdf, .pptx, .txt, or .md")
     text = path.read_text(encoding="utf-8")
     sections = _section_blocks(text)
     inferred_title = title or sections[0][0] if sections else title or path.stem
@@ -137,3 +139,17 @@ def _parse_pdf(path: Path, paper_id: str, title: str | None, year: int | None) -
         source_path=str(path.resolve()),
     )
     return build_document(paper, page_inputs)
+
+
+def _parse_pptx(path: Path, paper_id: str, title: str | None, year: int | None) -> ParsedPaper:
+    try:
+        from pptx import Presentation
+    except ImportError as error:
+        raise RuntimeError("PPTX support requires python-pptx") from error
+    slides = []
+    for index, slide in enumerate(Presentation(path).slides, start=1):
+        texts = [shape.text.strip() for shape in slide.shapes if hasattr(shape, "text") and shape.text.strip()]
+        if texts:
+            slides.append((f"Slide {index}", "\n".join(texts), index))
+    paper = Paper(id=paper_id, title=title or (slides[0][1].splitlines()[0][:200] if slides else path.stem), year=year, source_path=str(path.resolve()))
+    return build_document(paper, slides)

@@ -34,6 +34,22 @@ def test_chat_endpoint_returns_clarification(monkeypatch) -> None:
     assert response.json()["status"] == "clarification"
 
 
+def test_knowledge_api_uploads_document(tmp_path, monkeypatch) -> None:
+    from paperscout.knowledge import KnowledgeService
+
+    app.state.knowledge = KnowledgeService(tmp_path)
+    client = TestClient(app)
+    project = client.post("/api/projects", json={"name": "Guide"}).json()
+    response = client.post(
+        "/api/knowledge/upload",
+        data={"project_id": project["id"]},
+        files=[("files", ("guide.md", b"# Guide\n\nProject-specific instructions.", "text/markdown"))],
+    )
+
+    assert response.status_code == 200
+    assert response.json()[0]["project_id"] == project["id"]
+
+
 def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
     response = TestClient(app).get("/")
 
