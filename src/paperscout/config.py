@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     vector_index_path: Path = Path("data/vector.index")
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     use_reranker: bool = False
+    arxiv_api_url: str = "https://export.arxiv.org/api/query"
+    arxiv_timeout_seconds: float = Field(default=12.0, gt=0, le=60)
+    arxiv_max_results: int = Field(default=20, gt=0, le=100)
 
     max_steps: int = Field(default=12, gt=0, le=100)
     max_tool_calls: int = Field(default=24, gt=0, le=200)

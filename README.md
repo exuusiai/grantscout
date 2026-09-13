@@ -40,6 +40,12 @@ paths are rejected.
   extractive/free-form answers, evidence F1, latency, and token usage.
 - Start a minimal Web UI with `paperscout serve --host 0.0.0.0 --port 8000`.
 
+The Web UI uses the official arXiv API as its default source for AI-focused
+queries and stores returned abstracts in a separate `data/arxiv.sqlite` corpus.
+If arXiv is rate-limited or unreachable, the run fails visibly instead of
+silently substituting unrelated SciFact papers. The source selector can be
+switched explicitly to the local SciFact corpus.
+
 ## Data and model setup
 
 Download source files with recorded hashes:

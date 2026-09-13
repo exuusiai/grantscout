@@ -6,6 +6,7 @@ from paperscout.api.app import app
 from paperscout.config import Settings
 from paperscout.retrieval.parser import parse_document
 from paperscout.retrieval.store import CorpusStore
+from paperscout.retrieval.arxiv import ArxivSearchError
 
 
 def test_api_health_has_corpus_status() -> None:
@@ -22,8 +23,23 @@ def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
     assert '<html lang="zh-CN">' in response.text
     assert "开始综述" in response.text
     assert "PaperScout 论文侦察" in response.text
+    assert '<option value="arxiv" selected>' in response.text
     assert "正在分析，请稍候" in response.text
+    assert "buffer.split('\\n')" in response.text
+    assert "buffer.split('\n')" not in response.text
     assert "finally{run.disabled=false" in response.text
+
+
+def test_arxiv_failure_is_visible_instead_of_returning_local_results(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "paperscout.api.app.search_arxiv",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ArxivSearchError("rate limited")),
+    )
+
+    response = TestClient(app).post("/api/ask", json={"question": "Find GRPO papers"})
+
+    assert response.status_code == 503
+    assert "避免混入无关论文" in response.json()["detail"]
 
 
 def test_api_streams_tool_events_and_final_report(tmp_path, monkeypatch) -> None:
@@ -39,7 +55,10 @@ def test_api_streams_tool_events_and_final_report(tmp_path, monkeypatch) -> None
         lambda: Settings(data_dir=data_dir, runs_dir=tmp_path / "runs"),
     )
 
-    response = TestClient(app).post("/api/ask/stream", json={"question": "What improves evidence recall?"})
+    response = TestClient(app).post(
+        "/api/ask/stream",
+        json={"question": "What improves evidence recall?", "source": "local"},
+    )
     events = [json.loads(line) for line in response.text.splitlines()]
 
     assert response.status_code == 200
