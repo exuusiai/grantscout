@@ -52,7 +52,8 @@ def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
     assert "reportFragments?.[locale]||event.report_fragment" in response.text
     assert "locale,ranking:ranking.value})" in response.text
     assert "reportFragments[locale]" in response.text
-    assert "height:420px;overflow-y:auto" in response.text
+    assert "report-scroll{height:645px;overflow-y:auto" in response.text
+    assert 'class="side-stack"' in response.text
     assert "toolCopy=" in response.text
     assert 'type="search"' in response.text
     assert 'id="ranking"' in response.text
