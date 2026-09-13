@@ -80,8 +80,12 @@ def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
     assert "window.print()" in response.text
     assert 'id="chat-log"' in response.text
     assert 'id="send"' in response.text
-    assert "fetch('/api/chat'" in response.text
-    assert "type=\"button\" disabled>开始综述" in response.text
+    assert "jsonRequest('/api/chat'" in response.text
+    assert "type=\"button\" disabled>重新生成" in response.text
+    assert "setTimeout(runReview,0)" in response.text
+    assert "status.textContent=t('autoStarting')" in response.text
+    assert 'id="source-project"' in response.text
+    assert "project_id:project.value||null" in response.text
 
 
 def test_arxiv_failure_is_visible_instead_of_returning_local_results(monkeypatch) -> None:

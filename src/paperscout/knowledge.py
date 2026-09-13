@@ -96,6 +96,7 @@ class KnowledgeService:
             return [dict(row) for row in db.execute("SELECT * FROM documents WHERE project_id=? ORDER BY created_at DESC", (project_id,))]
 
     def corpus_path(self, project_id: str) -> Path:
+        self._require(project_id)
         return self.root / "projects" / project_id / "corpus.sqlite"
 
     def export(self, project_id: str) -> dict:

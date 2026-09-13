@@ -87,7 +87,8 @@ def export_project(project_id: str) -> JSONResponse:
 class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=2000)
     corpus: str | None = None
-    source: str = Field(default="arxiv", pattern="^(arxiv|local)$")
+    source: str = Field(default="arxiv", pattern="^(arxiv|local|project)$")
+    project_id: str | None = None
     locale: Literal["zh", "en"] = "zh"
     ranking: Literal["auto", "relevance", "recent", "citations"] = "auto"
 
@@ -117,6 +118,13 @@ def _ranking_for(request: AskRequest) -> str:
 
 
 def _corpus_path(request: AskRequest, settings: Settings) -> Path:
+    if request.source == "project":
+        if not request.project_id:
+            raise HTTPException(status_code=422, detail="Select a project knowledge base")
+        try:
+            return _knowledge().corpus_path(request.project_id)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="Unknown project") from error
     default_path = Path(settings.data_dir) / "corpus.sqlite"
     return Path(request.corpus) if request.corpus else default_path
 
@@ -132,7 +140,7 @@ def _require_populated_corpus(corpus_path: Path) -> None:
 def _prepare_source(
     request: AskRequest, settings: Settings
 ) -> tuple[Path, Settings, str | None, int, str | None]:
-    if request.source == "local" or request.corpus:
+    if request.source in {"local", "project"} or request.corpus:
         corpus_path = _corpus_path(request, settings)
         _require_populated_corpus(corpus_path)
         return corpus_path, settings, None, 0, None
@@ -215,7 +223,7 @@ def ask(request: AskRequest) -> dict[str, object]:
 def ask_stream(request: AskRequest) -> StreamingResponse:
     """Stream tool outcomes and the final traceable report as NDJSON."""
     settings = get_settings()
-    if request.source == "local" or request.corpus:
+    if request.source in {"local", "project"} or request.corpus:
         _require_populated_corpus(_corpus_path(request, settings))
 
     def stream() -> Iterator[str]:
