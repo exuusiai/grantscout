@@ -23,7 +23,18 @@ def test_model_planner_returns_bounded_questions() -> None:
         model_client=FakeJsonModel({"sub_questions": ["methods", "datasets", "methods"]}),
     )
 
-    assert questions == ["methods", "datasets"]
+    assert questions == ["Which methods improve evidence recall?", "methods"]
+
+
+def test_model_planner_rejects_topic_drift_for_acronyms() -> None:
+    questions = decompose_question(
+        "查找 GRPO 相关论文",
+        model_client=FakeJsonModel(
+            {"sub_questions": ["GRPO optimization methods", "gene regulation in plants"]}
+        ),
+    )
+
+    assert questions == ["查找 GRPO 相关论文", "GRPO optimization methods"]
 
 
 def test_model_fact_extraction_keeps_only_known_evidence_ids() -> None:

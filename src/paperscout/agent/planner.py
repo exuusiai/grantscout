@@ -52,12 +52,19 @@ def decompose_question(question: str, model_client=None) -> list[str]:
     values = payload.get("sub_questions") if isinstance(payload, dict) else payload
     if not isinstance(values, list):
         raise ModelClientError("Model question decomposition did not return sub_questions")
-    questions: list[str] = []
+    questions: list[str] = [" ".join(question.split())]
+    anchor_terms = {
+        term.lower() for term in re.findall(r"[A-Za-z][A-Za-z0-9+._-]{1,}", question)
+    }
     for value in values:
         if isinstance(value, str) and value.strip():
             normalized = " ".join(value.split())
+            if anchor_terms and not anchor_terms.intersection(
+                term.lower() for term in re.findall(r"[A-Za-z][A-Za-z0-9+._-]{1,}", normalized)
+            ):
+                continue
             if normalized not in questions:
                 questions.append(normalized)
     if not questions:
         raise ModelClientError("Model question decomposition returned no usable sub-questions")
-    return questions[:5]
+    return questions[:3]

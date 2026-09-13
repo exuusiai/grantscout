@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from collections.abc import Iterator
 from pathlib import Path
 from queue import Queue
@@ -49,17 +50,21 @@ def _prepare_source(request: AskRequest, settings: Settings) -> tuple[Path, Sett
         documents = search_arxiv(
             request.question,
             max_results=settings.arxiv_max_results,
-            timeout_seconds=settings.arxiv_timeout_seconds,
+            timeout_seconds=min(settings.arxiv_timeout_seconds, 5.0),
             api_url=settings.arxiv_api_url,
             cache_dir=Path(settings.data_dir) / "arxiv-cache",
+            max_retries=0,
         )
         if not documents:
             raise ArxivSearchError("arXiv returned no matching papers")
-        corpus_path = Path(settings.data_dir) / "arxiv.sqlite"
+        query_key = hashlib.sha256(request.question.strip().casefold().encode()).hexdigest()[:16]
+        corpus_path = Path(settings.data_dir) / "arxiv-queries" / f"{query_key}.sqlite"
         with CorpusStore(corpus_path) as store:
             for document in documents:
                 store.upsert(document)
-        source_settings = settings.model_copy(update={"retrieval_mode": "lexical"})
+        source_settings = settings.model_copy(
+            update={"retrieval_mode": "lexical", "max_papers": min(settings.max_papers, 3)}
+        )
         return corpus_path, source_settings, None, len(documents)
     except ArxivSearchError as error:
         raise ArxivSearchError(
@@ -86,7 +91,9 @@ def ask(request: AskRequest) -> dict[str, object]:
     except ArxivSearchError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     with CorpusStore(corpus_path) as store:
-        state = PaperScoutAgent(store, agent_settings).run(request.question)
+        state = PaperScoutAgent(
+            store, agent_settings, decompose=request.source != "arxiv"
+        ).run(request.question)
     if source_warning:
         state.warnings.insert(0, source_warning)
     payload = state.model_dump(mode="json")
@@ -126,6 +133,7 @@ def ask_stream(request: AskRequest) -> StreamingResponse:
                     agent = PaperScoutAgent(
                         store,
                         agent_settings,
+                        decompose=request.source != "arxiv",
                         on_tool_call=lambda tool_call: publish(
                             "tool_call", tool_call=tool_call.model_dump(mode="json")
                         ),

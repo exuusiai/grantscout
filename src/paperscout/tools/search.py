@@ -55,7 +55,7 @@ def retrieve_evidence(
     results = (
         semantic_index.search(query, top_k=top_k * 8)
         if semantic_index is not None
-        else store.search(query, top_k=top_k * 4)
+        else store.search(query, top_k=top_k, paper_ids={paper_id})
     )
     if reranker is not None:
         results = reranker.rerank(query, results, top_k=top_k * 8)

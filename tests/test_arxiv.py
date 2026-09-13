@@ -56,3 +56,14 @@ def test_arxiv_uses_cached_results_after_rate_limit(tmp_path, monkeypatch) -> No
 
     assert cached == first
     assert len(list(tmp_path.glob("*.json"))) == 1
+
+
+def test_arxiv_cache_is_used_without_network_request(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: Response(ATOM))
+    search_arxiv("GRPO", max_results=1, cache_dir=tmp_path)
+
+    def fail_if_called(request, timeout):
+        raise AssertionError("network should not be called for a cached query")
+
+    monkeypatch.setattr("urllib.request.urlopen", fail_if_called)
+    assert search_arxiv("GRPO", max_results=1, cache_dir=tmp_path)

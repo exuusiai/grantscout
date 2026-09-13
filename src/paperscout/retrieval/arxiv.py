@@ -36,6 +36,9 @@ def search_arxiv(
 ) -> list[ParsedPaper]:
     query = build_arxiv_query(question)
     cache_path = _cache_path(cache_dir, query, max_results) if cache_dir else None
+    cached = _read_cache(cache_path)
+    if cached is not None:
+        return cached
     parameters = urllib.parse.urlencode(
         {
             "search_query": f"all:{query}",

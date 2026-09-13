@@ -3,7 +3,7 @@ from pathlib import Path
 from paperscout.config import Settings
 from paperscout.retrieval.parser import parse_document
 from paperscout.retrieval.store import CorpusStore
-from paperscout.tools.search import search_papers
+from paperscout.tools.search import retrieve_evidence, search_papers
 
 
 def _write_sample(path: Path) -> None:
@@ -51,3 +51,19 @@ def test_fts_index_tracks_upserts(tmp_path: Path) -> None:
         assert store.search("alpha recall", top_k=1)[0].paper.id == "first"
         store.upsert(parse_document(second, paper_id="second"))
         assert store.search("beta latency", top_k=1)[0].paper.id == "second"
+
+
+def test_retrieve_evidence_filters_before_applying_limit(tmp_path: Path) -> None:
+    with CorpusStore(tmp_path / "scoped.sqlite") as store:
+        for index in range(8):
+            source = tmp_path / f"paper-{index}.txt"
+            source.write_text(
+                f"Results\n\nGRPO improves reasoning performance number {index}.",
+                encoding="utf-8",
+            )
+            store.upsert(parse_document(source, paper_id=f"paper-{index}"))
+
+        results = retrieve_evidence(store, "paper-7", "GRPO reasoning", top_k=1)
+
+    assert len(results) == 1
+    assert results[0].paper.id == "paper-7"

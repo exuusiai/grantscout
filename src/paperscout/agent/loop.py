@@ -80,7 +80,9 @@ class PaperScoutAgent:
                 break
             candidates = self._search(state, sub_question)
             for candidate in candidates:
-                candidate_by_id[candidate.paper.id] = candidate
+                existing = candidate_by_id.get(candidate.paper.id)
+                if existing is None or candidate.score > existing.score:
+                    candidate_by_id[candidate.paper.id] = candidate
         state.candidate_papers = sorted(
             candidate_by_id.values(), key=lambda candidate: candidate.score, reverse=True
         )[: self.settings.max_papers]

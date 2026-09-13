@@ -33,6 +33,8 @@ def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
     assert '<article id="report"' in response.text
     assert "report.innerHTML=event.report_fragment" in response.text
     assert "locale})" in response.text
+    assert "height:420px;overflow-y:auto" in response.text
+    assert "toolCopy=" in response.text
 
 
 def test_arxiv_failure_is_visible_instead_of_returning_local_results(monkeypatch) -> None:
