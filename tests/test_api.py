@@ -15,6 +15,17 @@ def test_api_health_has_corpus_status() -> None:
     assert response.json()["status"] == "ok"
 
 
+def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
+    response = TestClient(app).get("/")
+
+    assert response.status_code == 200
+    assert '<html lang="zh-CN">' in response.text
+    assert "开始综述" in response.text
+    assert "PaperScout 论文侦察" in response.text
+    assert "正在分析，请稍候" in response.text
+    assert "finally{run.disabled=false" in response.text
+
+
 def test_api_streams_tool_events_and_final_report(tmp_path, monkeypatch) -> None:
     data_dir = tmp_path / "data"
     data_dir.mkdir()
@@ -32,6 +43,8 @@ def test_api_streams_tool_events_and_final_report(tmp_path, monkeypatch) -> None
     events = [json.loads(line) for line in response.text.splitlines()]
 
     assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.headers["x-accel-buffering"] == "no"
     assert any(event["type"] == "tool_call" for event in events)
     assert events[-1]["type"] == "completed"
     assert "## Citation Audit" in events[-1]["report"]
