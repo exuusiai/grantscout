@@ -67,3 +67,14 @@ def test_retrieve_evidence_filters_before_applying_limit(tmp_path: Path) -> None
 
     assert len(results) == 1
     assert results[0].paper.id == "paper-7"
+
+
+def test_search_finds_latin_acronym_without_spaces_in_chinese_query(tmp_path: Path) -> None:
+    source = tmp_path / "grpo.txt"
+    source.write_text("Abstract\n\nGRPO improves reasoning performance.", encoding="utf-8")
+    with CorpusStore(tmp_path / "mixed-query.sqlite") as store:
+        store.upsert(parse_document(source, paper_id="grpo-paper"))
+        results = search_papers(store, "查找grpo相关的论文", top_k=3)
+
+    assert results
+    assert results[0].paper.id == "grpo-paper"

@@ -7,7 +7,9 @@ from paperscout.models.schemas import EvidenceItem, Paper, PaperSection, ParsedP
 
 
 def _tokens(text: str) -> list[str]:
-    return [token.lower() for token in re.findall(r"[\w]+", text, flags=re.UNICODE) if len(token) > 1]
+    # Keep Latin technical terms separate when users type them directly next to Chinese text.
+    tokens = re.findall(r"[A-Za-z][A-Za-z0-9+._-]*|[0-9]+|[\u3400-\u9fff]+", text)
+    return [token.lower() for token in tokens if len(token) > 1]
 
 
 class CorpusStore:
