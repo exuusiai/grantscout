@@ -55,6 +55,7 @@ class PaperCandidate(BaseModel):
 
 class Fact(BaseModel):
     text: str
+    localized_text: str | None = None
     evidence_id: str
     field: Literal[
         "method",
@@ -79,6 +80,7 @@ class StructuredFacts(BaseModel):
 class Claim(BaseModel):
     id: str
     text: str
+    localized_text: str | None = None
     evidence_ids: list[str] = Field(default_factory=list)
     support_status: Literal["supported", "refuted", "insufficient", "unknown"] = "unknown"
     confidence: float = Field(default=0.0, ge=0, le=1)

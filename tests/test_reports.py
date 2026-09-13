@@ -23,6 +23,7 @@ def test_reports_include_traceable_evidence_links() -> None:
             Claim(
                 id="claim:0000",
                 text="The method improves evidence recall.",
+                localized_text="该方法提高了证据召回率。",
                 evidence_ids=[evidence_id],
             )
         ],
@@ -36,3 +37,5 @@ def test_reports_include_traceable_evidence_links() -> None:
     assert "## Open Questions" in markdown
     assert f'id="evidence-{evidence_id}"' in html
     assert f'href="#evidence-{evidence_id}"' in html
+    assert "该方法提高了证据召回率。" in render_html(state, "zh")
+    assert "该方法提高了证据召回率。" not in render_html(state, "en")

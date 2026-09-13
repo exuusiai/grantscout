@@ -23,7 +23,36 @@ def build_arxiv_query(question: str) -> str:
     tokens = re.findall(r"[A-Za-z][A-Za-z0-9+._-]{1,}", question)
     ignored = {"about", "article", "articles", "find", "paper", "papers", "please", "related", "search"}
     selected = [token for token in tokens if token.lower() not in ignored]
-    return " ".join(dict.fromkeys(selected)) or question.strip()
+    if selected:
+        return " ".join(dict.fromkeys(selected))
+    glossary = {
+        "世界模型": "world model",
+        "多模态": "multimodal",
+        "大语言模型": "large language model",
+        "语言模型": "language model",
+        "强化学习": "reinforcement learning",
+        "扩散模型": "diffusion model",
+        "生成模型": "generative model",
+        "视觉语言": "vision language",
+        "智能体": "AI agent",
+        "检索增强生成": "retrieval augmented generation",
+        "知识图谱": "knowledge graph",
+        "机器翻译": "machine translation",
+        "目标检测": "object detection",
+        "图像生成": "image generation",
+    }
+    translated = []
+    covered: set[int] = set()
+    for chinese, english in sorted(glossary.items(), key=lambda item: len(item[0]), reverse=True):
+        start = question.find(chinese)
+        if start < 0:
+            continue
+        positions = set(range(start, start + len(chinese)))
+        if positions & covered:
+            continue
+        translated.append(english)
+        covered.update(positions)
+    return " ".join(dict.fromkeys(translated)) or question.strip()
 
 
 def search_arxiv(
@@ -41,7 +70,10 @@ def search_arxiv(
         return cached
     parameters = urllib.parse.urlencode(
         {
-            "search_query": f"all:{query}",
+            "search_query": (
+                f'all:"{query.replace(chr(34), "")}" AND '
+                "(cat:cs.AI OR cat:cs.LG OR cat:cs.CV OR cat:cs.CL OR cat:cs.RO)"
+            ),
             "start": 0,
             "max_results": max_results,
             "sortBy": "submittedDate",
@@ -114,7 +146,7 @@ def search_arxiv(
 
 
 def _cache_path(cache_dir: Path, query: str, max_results: int) -> Path:
-    key = hashlib.sha256(f"{query}\0{max_results}".encode()).hexdigest()
+    key = hashlib.sha256(f"v2\0{query}\0{max_results}".encode()).hexdigest()
     return cache_dir / f"{key}.json"
 
 
@@ -143,7 +175,10 @@ def _search_openalex(query: str, max_results: int, timeout_seconds: float) -> li
     parameters = urllib.parse.urlencode(
         {
             "search": query,
-            "filter": "locations.source.issn:2331-8422",
+            "filter": (
+                "locations.source.issn:2331-8422,"
+                "primary_topic.field.id:17"
+            ),
             "per-page": max_results,
         }
     )

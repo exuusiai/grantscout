@@ -28,6 +28,11 @@ def test_arxiv_query_extracts_english_terms_from_chinese_question() -> None:
     assert build_arxiv_query("查找一下GRPO相关的文章？") == "GRPO"
 
 
+def test_arxiv_query_translates_common_chinese_ai_topics() -> None:
+    assert build_arxiv_query("查找世界模型相关论文") == "world model"
+    assert build_arxiv_query("多模态大语言模型") == "large language model multimodal"
+
+
 def test_arxiv_atom_results_become_parsed_papers(monkeypatch) -> None:
     monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: Response(ATOM))
 

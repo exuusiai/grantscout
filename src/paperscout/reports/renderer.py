@@ -142,7 +142,7 @@ def render_markdown(state: ResearchState) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_html_english(state: ResearchState) -> str:
+def _render_html_english(state: ResearchState, locale: str = "en") -> str:
     """Render a self-contained HTML report with evidence anchors and citations."""
     duration = _duration_seconds(state)
     model_calls = sum(call.tool.startswith("model_") for call in state.tool_history)
@@ -154,7 +154,8 @@ def _render_html_english(state: ResearchState) -> str:
     ) or "<li>No local paper matched.</li>"
     findings = "".join(
         "<li>"
-        f"{escape(claim.text)} [{escape(claim.support_status)}; "
+        f"{escape(claim.localized_text or claim.text) if locale == 'zh' else escape(claim.text)} "
+        f"[{escape(claim.support_status)}; "
         f"{_citations_html(claim.evidence_ids)}]"
         "</li>"
         for claim in state.claims
@@ -165,7 +166,7 @@ def _render_html_english(state: ResearchState) -> str:
         f"{_citations_html([*conflict.positive_evidence_ids, *conflict.negative_evidence_ids])}]</li>"
         for conflict in state.conflicts
     ) or "<li>No cross-paper conflict was detected in the retrieved evidence.</li>"
-    limitations = _facts_html(state, "limitations") or (
+    limitations = _facts_html(state, "limitations", locale) or (
         "<li>No limitations were extracted from retrieved evidence.</li>"
     )
     audit = state.citation_audit
@@ -190,8 +191,8 @@ def _render_html_english(state: ResearchState) -> str:
 <h2>Research Question Decomposition</h2><ul>{decomposed_questions}</ul>
 <h2>Selected Papers</h2><ul>{selected_papers}</ul>
 <h2>Main Findings</h2><ul>{findings}</ul>
-<h2>Method Comparison</h2>{_comparison_html(state, ('methods', 'conclusions', 'limitations'))}
-<h2>Dataset and Experimental Setup Comparison</h2>{_comparison_html(state, ('datasets', 'experimental_settings', 'metrics'))}
+<h2>Method Comparison</h2>{_comparison_html(state, ('methods', 'conclusions', 'limitations'), locale)}
+<h2>Dataset and Experimental Setup Comparison</h2>{_comparison_html(state, ('datasets', 'experimental_settings', 'metrics'), locale)}
 <h2>Limitations</h2><ul>{limitations}</ul>
 <h2>Conflicting Evidence</h2><ul>{conflicts}</ul>
 <h2>Open Questions</h2><ul>{open_questions}</ul>
@@ -251,7 +252,7 @@ _ZH_REPORT_COPY = {
 
 def render_html(state: ResearchState, locale: str = "en") -> str:
     """Render a self-contained, localized HTML research note."""
-    document = _render_html_english(state)
+    document = _render_html_english(state, locale)
     if locale == "zh":
         for source, target in _ZH_REPORT_COPY.items():
             document = document.replace(source, target)
@@ -273,12 +274,23 @@ def _evidence_row(item: EvidenceItem, papers: dict[str, str]) -> str:
     )
 
 
-def _comparison_html(state: ResearchState, fields: tuple[str, ...]) -> str:
+def _comparison_html(
+    state: ResearchState, fields: tuple[str, ...], locale: str = "en"
+) -> str:
     rows = ""
+    facts_by_id = {facts.paper_id: facts for facts in state.facts}
     for row in state.comparison:
-        rows += f"<h3>{escape(str(row['paper_id']))}</h3><ul>"
+        paper_id = str(row["paper_id"])
+        facts = facts_by_id.get(paper_id)
+        rows += f"<h3>{escape(paper_id)}</h3><ul>"
         for field in fields:
             values = row.get(field) or ["Not extracted"]
+            if facts is not None:
+                source_facts = getattr(facts, field)
+                values = [
+                    fact.localized_text if locale == "zh" and fact.localized_text else fact.text
+                    for fact in source_facts[:5]
+                ] or ["Not extracted"]
             label = escape(field.replace("_", " ").title())
             contents = escape(" | ".join(str(value) for value in values))
             rows += f"<li><strong>{label}:</strong> {contents}</li>"
@@ -286,10 +298,11 @@ def _comparison_html(state: ResearchState, fields: tuple[str, ...]) -> str:
     return rows or "<p>No structured facts were extracted.</p>"
 
 
-def _facts_html(state: ResearchState, field: str) -> str:
+def _facts_html(state: ResearchState, field: str, locale: str = "en") -> str:
     items = []
     for facts in state.facts:
         for fact in getattr(facts, field):
             citation = _citations_html([fact.evidence_id])
-            items.append(f"<li><code>{escape(facts.paper_id)}</code>: {escape(fact.text)} [{citation}]</li>")
+            text = fact.localized_text if locale == "zh" and fact.localized_text else fact.text
+            items.append(f"<li><code>{escape(facts.paper_id)}</code>: {escape(text)} [{citation}]</li>")
     return "".join(items)

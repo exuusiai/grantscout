@@ -1,21 +1,27 @@
 from paperscout.models.schemas import Conflict, StructuredFacts
 
 
-def compare_papers(facts: list[StructuredFacts]) -> list[dict[str, object]]:
+def compare_papers(
+    facts: list[StructuredFacts], prefer_localized: bool = False
+) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for item in facts:
         rows.append(
             {
                 "paper_id": item.paper_id,
-                "methods": [fact.text for fact in item.methods[:5]],
-                "datasets": [fact.text for fact in item.datasets[:5]],
-                "experimental_settings": [fact.text for fact in item.experimental_settings[:5]],
-                "metrics": [fact.text for fact in item.metrics[:5]],
-                "conclusions": [fact.text for fact in item.conclusions[:5]],
-                "limitations": [fact.text for fact in item.limitations[:5]],
+                "methods": [_display(fact, prefer_localized) for fact in item.methods[:5]],
+                "datasets": [_display(fact, prefer_localized) for fact in item.datasets[:5]],
+                "experimental_settings": [_display(fact, prefer_localized) for fact in item.experimental_settings[:5]],
+                "metrics": [_display(fact, prefer_localized) for fact in item.metrics[:5]],
+                "conclusions": [_display(fact, prefer_localized) for fact in item.conclusions[:5]],
+                "limitations": [_display(fact, prefer_localized) for fact in item.limitations[:5]],
             }
         )
     return rows
+
+
+def _display(fact, prefer_localized: bool) -> str:
+    return fact.localized_text if prefer_localized and fact.localized_text else fact.text
 
 
 def find_contradictions(facts: list[StructuredFacts]) -> list[Conflict]:

@@ -33,6 +33,7 @@ class PaperScoutAgent:
         on_tool_call: Callable[[ToolCall], None] | None = None,
         semantic_index: SemanticIndex | None = None,
         reranker_instance: CrossEncoderReranker | None = None,
+        output_language: str = "en",
     ) -> None:
         self.store = store
         self.settings = settings
@@ -53,6 +54,7 @@ class PaperScoutAgent:
         )
         self.semantic_index = semantic_index
         self.reranker = reranker_instance
+        self.output_language = output_language
         if settings.retrieval_mode.lower() == "semantic" and self.semantic_index is None:
             self.semantic_index = SemanticIndex(settings.vector_index_path, settings.embedding_model)
             try:
@@ -68,13 +70,14 @@ class PaperScoutAgent:
                 logger.warning("Reranker unavailable; continuing without reranking: %s", error)
                 self.reranker = None
 
-    def run(self, question: str) -> ResearchState:
+    def run(self, question: str, search_query: str | None = None) -> ResearchState:
         state = ResearchState(run_id=self._run_id(), question=question)
         self._record(state, "plan_question", {"question": question}, lambda: {"status": "deterministic"})
         state.sub_questions = self._decompose(state, question)
+        retrieval_questions = [search_query] if search_query else state.sub_questions
 
         candidate_by_id = {}
-        for sub_question in state.sub_questions:
+        for sub_question in retrieval_questions:
             if self._budget_exhausted(state):
                 state.warnings.append("Agent budget reached before all sub-questions were searched.")
                 break
@@ -95,14 +98,16 @@ class PaperScoutAgent:
             if self._budget_exhausted(state):
                 state.warnings.append("Agent budget reached before all selected papers were processed.")
                 break
-            evidence_results = self._retrieve(state, paper.id, question)
+            evidence_results = self._retrieve(state, paper.id, search_query or question)
             paper_evidence = [result.evidence for result in evidence_results]
             state.evidence_items.extend(paper_evidence)
             facts = self._extract_facts(state, paper.id, paper_evidence)
             state.facts.append(facts)
             self._append_claims(state, facts)
 
-        state.comparison = compare_papers(state.facts)
+        state.comparison = compare_papers(
+            state.facts, prefer_localized=self.output_language == "zh"
+        )
         if self.conflict_detection_enabled:
             state.conflicts = find_contradictions(state.facts)
             state.warnings.extend(conflict.message for conflict in state.conflicts)
@@ -148,6 +153,7 @@ class PaperScoutAgent:
                     paper_id,
                     evidence_items,
                     model_client=self.model_client,
+                    output_language="Chinese" if self.output_language == "zh" else "English",
                 ),
             )
             if isinstance(modeled, StructuredFacts):
@@ -219,7 +225,13 @@ class PaperScoutAgent:
         for fact in facts.conclusions[:5]:
             claim_id = f"claim:{len(state.claims):04d}"
             state.claims.append(
-                Claim(id=claim_id, text=fact.text, evidence_ids=[fact.evidence_id], confidence=0.0)
+                Claim(
+                    id=claim_id,
+                    text=fact.text,
+                    localized_text=fact.localized_text,
+                    evidence_ids=[fact.evidence_id],
+                    confidence=0.0,
+                )
             )
         if not facts.conclusions and facts.methods:
             fact = facts.methods[0]
@@ -227,6 +239,7 @@ class PaperScoutAgent:
                 Claim(
                     id=f"claim:{len(state.claims):04d}",
                     text=fact.text,
+                    localized_text=fact.localized_text,
                     evidence_ids=[fact.evidence_id],
                     confidence=0.0,
                 )

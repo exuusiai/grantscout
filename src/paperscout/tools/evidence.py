@@ -32,6 +32,7 @@ def extract_structured_facts(
     paper_id: str,
     evidence_items: list[EvidenceItem] | None = None,
     model_client=None,
+    output_language: str = "en",
 ) -> StructuredFacts:
     """Extract traceable facts, optionally using the configured local model."""
     items = evidence_items or []
@@ -39,7 +40,7 @@ def extract_structured_facts(
         rows = store.search(paper_id, top_k=100)
         items = [row.evidence for row in rows if row.evidence.paper_id == paper_id]
     if model_client is not None:
-        return _extract_with_model(paper_id, items, model_client)
+        return _extract_with_model(paper_id, items, model_client, output_language)
     return _extract_with_keywords(paper_id, items)
 
 
@@ -61,7 +62,9 @@ def _extract_with_keywords(paper_id: str, items: list[EvidenceItem]) -> Structur
     return facts
 
 
-def _extract_with_model(paper_id: str, items: list[EvidenceItem], model_client) -> StructuredFacts:
+def _extract_with_model(
+    paper_id: str, items: list[EvidenceItem], model_client, output_language: str
+) -> StructuredFacts:
     if not items:
         raise ModelClientError("Cannot extract model facts without retrieved evidence")
     payload = model_client.chat_json(
@@ -72,7 +75,10 @@ def _extract_with_model(paper_id: str, items: list[EvidenceItem], model_client) 
                     "Extract only evidence-grounded facts from supplied paper evidence. "
                     "Return JSON arrays named methods, datasets, experimental_settings, "
                     "metrics, conclusions, and limitations. Each item must contain text and "
-                    "an evidence_id copied exactly from the input. Never invent evidence IDs."
+                    "an evidence_id copied exactly from the input. The text field must stay in "
+                    "the source language and closely quote the evidence for verification. Also "
+                    f"include localized_text translated into {output_language}. Preserve technical "
+                    "terms and model names. Never invent evidence IDs."
                 ),
             },
             {

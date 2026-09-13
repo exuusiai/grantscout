@@ -31,8 +31,9 @@ def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
     assert "buffer.split('\n')" not in response.text
     assert "finally{run.disabled=false" in response.text
     assert '<article id="report"' in response.text
-    assert "report.innerHTML=event.report_fragment" in response.text
+    assert "reportFragments?.[locale]||event.report_fragment" in response.text
     assert "locale})" in response.text
+    assert "reportFragments[locale]" in response.text
     assert "height:420px;overflow-y:auto" in response.text
     assert "toolCopy=" in response.text
     assert 'type="search"' in response.text
@@ -77,3 +78,4 @@ def test_api_streams_tool_events_and_final_report(tmp_path, monkeypatch) -> None
     assert "## Citation Audit" in events[-1]["report"]
     assert "<h1>PaperScout 研究笔记" in events[-1]["report_fragment"]
     assert "<article" not in events[-1]["report_fragment"]
+    assert set(events[-1]["report_fragments"]) == {"zh", "en"}

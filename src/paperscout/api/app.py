@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from paperscout.agent.loop import PaperScoutAgent
 from paperscout.config import Settings, get_settings
 from paperscout.reports.renderer import render_html, render_html_fragment, render_markdown
-from paperscout.retrieval.arxiv import ArxivSearchError, search_arxiv
+from paperscout.retrieval.arxiv import ArxivSearchError, build_arxiv_query, search_arxiv
 from paperscout.retrieval.store import CorpusStore
 
 app = FastAPI(title="PaperScout", version="0.1.0")
@@ -57,7 +57,10 @@ def _prepare_source(request: AskRequest, settings: Settings) -> tuple[Path, Sett
         )
         if not documents:
             raise ArxivSearchError("arXiv returned no matching papers")
-        query_key = hashlib.sha256(request.question.strip().casefold().encode()).hexdigest()[:16]
+        search_query = build_arxiv_query(request.question)
+        query_key = hashlib.sha256(
+            f"v2\0{request.question.strip().casefold()}\0{search_query}".encode()
+        ).hexdigest()[:16]
         corpus_path = Path(settings.data_dir) / "arxiv-queries" / f"{query_key}.sqlite"
         with CorpusStore(corpus_path) as store:
             for document in documents:
@@ -92,14 +95,24 @@ def ask(request: AskRequest) -> dict[str, object]:
         raise HTTPException(status_code=503, detail=str(error)) from error
     with CorpusStore(corpus_path) as store:
         state = PaperScoutAgent(
-            store, agent_settings, decompose=request.source != "arxiv"
-        ).run(request.question)
+            store,
+            agent_settings,
+            decompose=request.source != "arxiv",
+            output_language=request.locale,
+        ).run(
+            request.question,
+            search_query=build_arxiv_query(request.question) if request.source == "arxiv" else None,
+        )
     if source_warning:
         state.warnings.insert(0, source_warning)
     payload = state.model_dump(mode="json")
     payload["report"] = render_markdown(state)
     payload["report_html"] = render_html(state, request.locale)
     payload["report_fragment"] = render_html_fragment(state, request.locale)
+    payload["report_fragments"] = {
+        "zh": render_html_fragment(state, "zh"),
+        "en": render_html_fragment(state, "en"),
+    }
     return payload
 
 
@@ -134,11 +147,19 @@ def ask_stream(request: AskRequest) -> StreamingResponse:
                         store,
                         agent_settings,
                         decompose=request.source != "arxiv",
+                        output_language=request.locale,
                         on_tool_call=lambda tool_call: publish(
                             "tool_call", tool_call=tool_call.model_dump(mode="json")
                         ),
                     )
-                    state = agent.run(request.question)
+                    state = agent.run(
+                        request.question,
+                        search_query=(
+                            build_arxiv_query(request.question)
+                            if request.source == "arxiv"
+                            else None
+                        ),
+                    )
                 if source_warning:
                     state.warnings.insert(0, source_warning)
                 publish(
@@ -147,6 +168,10 @@ def ask_stream(request: AskRequest) -> StreamingResponse:
                     report=render_markdown(state),
                     report_html=render_html(state, request.locale),
                     report_fragment=render_html_fragment(state, request.locale),
+                    report_fragments={
+                        "zh": render_html_fragment(state, "zh"),
+                        "en": render_html_fragment(state, "en"),
+                    },
                 )
             except Exception as error:
                 publish("error", message=str(error))
