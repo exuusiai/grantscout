@@ -138,6 +138,11 @@ preflight fails before vLLM starts.
 See `docs/architecture.md`, `docs/evaluation.md`, and `docs/security.md` for the
 design and reproducibility contract.
 
+Cross-paper conflict evaluation is intentionally separate from SciFact
+claim-evidence labels. Use the annotation audit script only with independently
+reviewed conflict pairs; silver pilot labels are diagnostic and cannot establish
+conflict recall.
+
 The current SciFact dev retrieval comparison is recorded in
 `docs/scifact-retrieval-comparison.md`. It contains separate lexical and
 semantic runs; the semantic run uses the local BGE index and no external model
