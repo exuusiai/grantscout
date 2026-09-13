@@ -149,3 +149,70 @@ def verify_claim(claim: Claim, evidence_items: list[EvidenceItem]) -> Claim:
     overlap = len(matched_terms) / max(len(claim_terms), 1)
     status = "supported" if overlap >= 0.35 else "insufficient"
     return claim.model_copy(update={"support_status": status, "confidence": round(min(overlap, 1.0), 3)})
+
+
+def synthesize_claims(
+    question: str,
+    evidence_items: list[EvidenceItem],
+    model_client,
+    output_language: str = "English",
+) -> list[Claim]:
+    """Create concise cross-paper findings instead of exposing extracted sentences."""
+    if not evidence_items:
+        return []
+    payload = model_client.chat_json(
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Synthesize the supplied paper evidence into 2-5 concise findings that answer "
+                    "the research question. Paraphrase and combine evidence; do not copy full source "
+                    "sentences. Do not add facts absent from evidence. Return a JSON object with a "
+                    "claims array. Each claim must have English text, localized_text in "
+                    f"{output_language}, and evidence_ids copied exactly from input."
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "question": question,
+                        "evidence": [
+                            {"evidence_id": item.id, "text": item.text}
+                            for item in evidence_items
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        ],
+        max_tokens=1024,
+        temperature=0.1,
+    )
+    if not isinstance(payload, dict) or not isinstance(payload.get("claims"), list):
+        raise ModelClientError("Finding synthesis did not return a claims array")
+    known_ids = {item.id for item in evidence_items}
+    claims = []
+    for value in payload["claims"][:5]:
+        if not isinstance(value, dict):
+            continue
+        evidence_ids = [item for item in value.get("evidence_ids", []) if item in known_ids]
+        text = value.get("text")
+        if not isinstance(text, str) or not text.strip() or not evidence_ids:
+            continue
+        localized = value.get("localized_text")
+        if output_language == "Chinese" and (
+            not isinstance(localized, str) or not localized.strip()
+        ):
+            continue
+        claims.append(
+            Claim(
+                id=f"claim:{len(claims):04d}",
+                text=text.strip(),
+                localized_text=localized.strip() if isinstance(localized, str) else None,
+                evidence_ids=evidence_ids,
+            )
+        )
+    if not claims:
+        raise ModelClientError("Finding synthesis returned no grounded claims")
+    return claims

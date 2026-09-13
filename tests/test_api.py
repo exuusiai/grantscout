@@ -7,6 +7,7 @@ from paperscout.config import Settings
 from paperscout.retrieval.parser import parse_document
 from paperscout.retrieval.store import CorpusStore
 from paperscout.retrieval.arxiv import ArxivSearchError
+from paperscout.agent.conversation import ConversationResult
 
 
 def test_api_health_has_corpus_status() -> None:
@@ -14,6 +15,23 @@ def test_api_health_has_corpus_status() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_chat_endpoint_returns_clarification(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "paperscout.api.app.understand_request",
+        lambda messages, settings, locale: ConversationResult(
+            status="clarification", message="你指的是哪一种基架？"
+        ),
+    )
+
+    response = TestClient(app).post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "查找基架相关论文"}], "locale": "zh"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "clarification"
 
 
 def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
@@ -29,7 +47,7 @@ def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
     assert "正在分析，请稍候" in response.text
     assert "buffer.split('\\n')" in response.text
     assert "buffer.split('\n')" not in response.text
-    assert "finally{run.disabled=false" in response.text
+    assert "finally{run.disabled=!resolvedQuestion" in response.text
     assert '<article id="report"' in response.text
     assert "reportFragments?.[locale]||event.report_fragment" in response.text
     assert "locale,ranking:ranking.value})" in response.text
@@ -43,6 +61,10 @@ def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
     assert "latestPapers.slice(0,3)" in response.text
     assert "replace('/abs/','/pdf/')" in response.text
     assert "window.print()" in response.text
+    assert 'id="chat-log"' in response.text
+    assert 'id="send"' in response.text
+    assert "fetch('/api/chat'" in response.text
+    assert "type=\"button\" disabled>开始综述" in response.text
 
 
 def test_arxiv_failure_is_visible_instead_of_returning_local_results(monkeypatch) -> None:

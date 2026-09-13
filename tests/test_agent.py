@@ -6,7 +6,7 @@ from paperscout.config import Settings
 from paperscout.models.schemas import EvidenceItem
 from paperscout.retrieval.parser import parse_document
 from paperscout.retrieval.store import CorpusStore
-from paperscout.tools.evidence import extract_structured_facts
+from paperscout.tools.evidence import extract_structured_facts, synthesize_claims
 
 
 class FakeJsonModel:
@@ -59,6 +59,35 @@ def test_model_fact_extraction_keeps_only_known_evidence_ids() -> None:
     )
 
     assert [fact.evidence_id for fact in facts.methods] == [evidence.id]
+
+
+def test_model_synthesizes_findings_with_known_evidence_ids() -> None:
+    evidence = EvidenceItem(
+        id="paper:section:0000:evidence:0000",
+        paper_id="paper",
+        section_id="paper:section:0000",
+        text="The system reduces inference latency by batching requests.",
+    )
+    claims = synthesize_claims(
+        "How is inference accelerated?",
+        [evidence],
+        FakeJsonModel(
+            {
+                "claims": [
+                    {
+                        "text": "Request batching is used to reduce inference latency.",
+                        "localized_text": "系统通过请求批处理降低推理延迟。",
+                        "evidence_ids": [evidence.id, "invented"],
+                    }
+                ]
+            }
+        ),
+        "Chinese",
+    )
+
+    assert claims[0].text != evidence.text
+    assert claims[0].localized_text == "系统通过请求批处理降低推理延迟。"
+    assert claims[0].evidence_ids == [evidence.id]
 
 
 def test_agent_generates_traceable_report(tmp_path: Path) -> None:

@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from paperscout.agent.conversation import ConversationMessage, ConversationResult, understand_request
 from paperscout.agent.loop import PaperScoutAgent
 from paperscout.config import Settings, get_settings
 from paperscout.reports.renderer import render_html, render_html_fragment, render_markdown
@@ -28,6 +29,19 @@ class AskRequest(BaseModel):
     source: str = Field(default="arxiv", pattern="^(arxiv|local)$")
     locale: Literal["zh", "en"] = "zh"
     ranking: Literal["auto", "relevance", "recent", "citations"] = "auto"
+
+
+class ChatRequest(BaseModel):
+    messages: list[ConversationMessage] = Field(min_length=1, max_length=20)
+    locale: Literal["zh", "en"] = "zh"
+
+
+@app.post("/api/chat", response_model=ConversationResult)
+def chat(request: ChatRequest) -> ConversationResult:
+    try:
+        return understand_request(request.messages, get_settings(), request.locale)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 def _ranking_for(request: AskRequest) -> str:

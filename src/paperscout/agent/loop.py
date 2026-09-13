@@ -15,7 +15,7 @@ from paperscout.retrieval.semantic import SemanticIndex, SemanticIndexError
 from paperscout.retrieval.reranker import CrossEncoderReranker, RerankerError
 from paperscout.tools.audit import audit_citations
 from paperscout.tools.comparison import compare_papers, find_contradictions
-from paperscout.tools.evidence import extract_structured_facts
+from paperscout.tools.evidence import extract_structured_facts, synthesize_claims
 from paperscout.tools.search import retrieve_evidence, search_papers
 
 logger = logging.getLogger(__name__)
@@ -104,6 +104,21 @@ class PaperScoutAgent:
             facts = self._extract_facts(state, paper.id, paper_evidence)
             state.facts.append(facts)
             self._append_claims(state, facts)
+
+        if self.model_client is not None and state.evidence_items:
+            synthesized = self._record(
+                state,
+                "model_synthesize_findings",
+                {"question": question, "evidence_count": len(state.evidence_items)},
+                lambda: synthesize_claims(
+                    question,
+                    state.evidence_items,
+                    self.model_client,
+                    "Chinese" if self.output_language == "zh" else "English",
+                ),
+            )
+            if isinstance(synthesized, list) and synthesized:
+                state.claims = synthesized
 
         state.comparison = compare_papers(
             state.facts, prefer_localized=self.output_language == "zh"
