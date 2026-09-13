@@ -26,6 +26,9 @@
 - Added a drag-and-drop upload panel with live task polling.
 - Added visible project creation, upload queue, ingestion completion, and failure feedback. Selecting or creating a project now switches the active source to that project's corpus.
 - Added project existence validation before resolving a project corpus path.
+- Added project and individual document deletion with synchronized removal from SQLite FTS.
+- Added automatic report archival: generated Markdown reports are parsed and hot-indexed beside uploaded papers so later project searches can reuse them.
+- Added project-scoped persistent conversations, message restoration, conversation switching, and deletion. The UI now follows a project-as-workspace and conversation-as-task structure.
 
 ### Validation and known boundaries
 

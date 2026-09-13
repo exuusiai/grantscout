@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import shutil
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -34,6 +35,8 @@ class KnowledgeService:
             PRAGMA foreign_keys=ON;
             CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY,name TEXT NOT NULL,created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS documents(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,name TEXT NOT NULL,status TEXT NOT NULL,progress INTEGER NOT NULL,error TEXT,path TEXT,sha256 TEXT,created_at TEXT NOT NULL,FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE);
+            CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,title TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE);
+            CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT,conversation_id TEXT NOT NULL,role TEXT NOT NULL,content TEXT NOT NULL,created_at TEXT NOT NULL,FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE);
             """)
 
     def _db(self):
@@ -50,6 +53,15 @@ class KnowledgeService:
     def projects(self) -> list[dict]:
         with self._db() as db:
             return [dict(row) for row in db.execute("SELECT * FROM projects ORDER BY created_at DESC")]
+
+    def delete_project(self, project_id: str) -> None:
+        self._require(project_id)
+        with self.lock, self._db() as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            db.execute("DELETE FROM projects WHERE id=?", (project_id,))
+        directory = self.root / "projects" / project_id
+        if directory.exists():
+            shutil.rmtree(directory)
 
     def enqueue(self, project_id: str, name: str, payload: bytes) -> dict:
         self._require(project_id)
@@ -72,6 +84,7 @@ class KnowledgeService:
         try:
             parser = PARSERS.get(path.suffix.lower().lstrip("."))
             parsed = parser(path, document_id) if parser else parse_document(path, paper_id=document_id)
+            self.document(document_id)
             self._update(document_id, "indexing", 70)
             with self.lock, CorpusStore(self.corpus_path(project_id)) as store:
                 store.upsert(parsed)
@@ -94,6 +107,72 @@ class KnowledgeService:
         self._require(project_id)
         with self._db() as db:
             return [dict(row) for row in db.execute("SELECT * FROM documents WHERE project_id=? ORDER BY created_at DESC", (project_id,))]
+
+    def delete_document(self, document_id: str) -> None:
+        document = self.document(document_id)
+        path = Path(document["path"]) if document.get("path") else None
+        corpus = self.corpus_path(document["project_id"])
+        with self.lock:
+            if corpus.exists():
+                with CorpusStore(corpus) as store:
+                    store.delete(document_id)
+            with self._db() as db:
+                db.execute("DELETE FROM documents WHERE id=?", (document_id,))
+            if path and path.exists() and self.root in path.parents:
+                path.unlink()
+
+    def save_report(self, project_id: str, title: str, markdown: str) -> dict:
+        self._require(project_id)
+        name = f"{title.strip()[:80] or 'Research report'}.md"
+        return self.enqueue(project_id, name, markdown.encode("utf-8"))
+
+    def create_conversation(self, project_id: str, title: str = "New conversation") -> dict:
+        self._require(project_id)
+        conversation_id = uuid4().hex
+        now = _now()
+        with self._db() as db:
+            db.execute(
+                "INSERT INTO conversations VALUES(?,?,?,?,?)",
+                (conversation_id, project_id, title.strip()[:120] or "New conversation", now, now),
+            )
+        return self.conversation(conversation_id)
+
+    def conversations(self, project_id: str) -> list[dict]:
+        self._require(project_id)
+        with self._db() as db:
+            return [dict(row) for row in db.execute(
+                "SELECT * FROM conversations WHERE project_id=? ORDER BY updated_at DESC", (project_id,)
+            )]
+
+    def conversation(self, conversation_id: str) -> dict:
+        with self._db() as db:
+            row = db.execute("SELECT * FROM conversations WHERE id=?", (conversation_id,)).fetchone()
+            if not row:
+                raise KeyError(conversation_id)
+            messages = [dict(item) for item in db.execute(
+                "SELECT role,content,created_at FROM messages WHERE conversation_id=? ORDER BY id", (conversation_id,)
+            )]
+        return {**dict(row), "messages": messages}
+
+    def save_messages(self, conversation_id: str, messages: list[dict[str, str]]) -> dict:
+        conversation = self.conversation(conversation_id)
+        now = _now()
+        with self._db() as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            db.execute("DELETE FROM messages WHERE conversation_id=?", (conversation_id,))
+            db.executemany(
+                "INSERT INTO messages(conversation_id,role,content,created_at) VALUES(?,?,?,?)",
+                [(conversation_id, item["role"], item["content"], now) for item in messages],
+            )
+            title = next((item["content"][:80] for item in messages if item["role"] == "user"), conversation["title"])
+            db.execute("UPDATE conversations SET title=?,updated_at=? WHERE id=?", (title, now, conversation_id))
+        return self.conversation(conversation_id)
+
+    def delete_conversation(self, conversation_id: str) -> None:
+        self.conversation(conversation_id)
+        with self._db() as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            db.execute("DELETE FROM conversations WHERE id=?", (conversation_id,))
 
     def corpus_path(self, project_id: str) -> Path:
         self._require(project_id)

@@ -19,6 +19,7 @@ class ConversationResult(BaseModel):
     message: str
     refined_question: str | None = None
     ranking: Literal["relevance", "recent", "citations"] = "relevance"
+    conversation_id: str | None = None
 
 
 def understand_request(

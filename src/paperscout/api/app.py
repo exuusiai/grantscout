@@ -45,6 +45,14 @@ def list_projects() -> list[dict]:
     return _knowledge().projects()
 
 
+@app.delete("/api/projects/{project_id}", status_code=204)
+def delete_project(project_id: str) -> None:
+    try:
+        _knowledge().delete_project(project_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Unknown project") from error
+
+
 @app.post("/api/knowledge/upload")
 async def upload_documents(
     project_id: str = Form(...), files: list[UploadFile] = File(...)
@@ -66,6 +74,51 @@ def list_documents(project_id: str) -> list[dict]:
         return _knowledge().documents(project_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Unknown project") from error
+
+
+@app.delete("/api/knowledge/documents/{document_id}", status_code=204)
+def delete_document(document_id: str) -> None:
+    try:
+        _knowledge().delete_document(document_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Unknown document") from error
+
+
+class ConversationRequest(BaseModel):
+    project_id: str
+    title: str = Field(default="New conversation", max_length=120)
+
+
+@app.post("/api/conversations")
+def create_conversation(request: ConversationRequest) -> dict:
+    try:
+        return _knowledge().create_conversation(request.project_id, request.title)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Unknown project") from error
+
+
+@app.get("/api/projects/{project_id}/conversations")
+def list_conversations(project_id: str) -> list[dict]:
+    try:
+        return _knowledge().conversations(project_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Unknown project") from error
+
+
+@app.get("/api/conversations/{conversation_id}")
+def get_conversation(conversation_id: str) -> dict:
+    try:
+        return _knowledge().conversation(conversation_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Unknown conversation") from error
+
+
+@app.delete("/api/conversations/{conversation_id}", status_code=204)
+def delete_conversation(conversation_id: str) -> None:
+    try:
+        _knowledge().delete_conversation(conversation_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Unknown conversation") from error
 
 
 @app.get("/api/knowledge/tasks/{document_id}")
@@ -96,12 +149,27 @@ class AskRequest(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[ConversationMessage] = Field(min_length=1, max_length=20)
     locale: Literal["zh", "en"] = "zh"
+    project_id: str | None = None
+    conversation_id: str | None = None
 
 
 @app.post("/api/chat", response_model=ConversationResult)
 def chat(request: ChatRequest) -> ConversationResult:
     try:
-        return understand_request(request.messages, get_settings(), request.locale)
+        conversation_id = request.conversation_id
+        if request.project_id and not conversation_id:
+            conversation_id = _knowledge().create_conversation(
+                request.project_id, request.messages[0].content
+            )["id"]
+        result = understand_request(request.messages, get_settings(), request.locale)
+        if conversation_id:
+            persisted = [message.model_dump() for message in request.messages]
+            persisted.append({"role": "assistant", "content": result.message})
+            _knowledge().save_messages(conversation_id, persisted)
+            result.conversation_id = conversation_id
+        return result
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Unknown project or conversation") from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -216,6 +284,13 @@ def ask(request: AskRequest) -> dict[str, object]:
         "zh": render_html_fragment(state, "zh"),
         "en": render_html_fragment(state, "en"),
     }
+    if request.project_id:
+        try:
+            payload["archived_report"] = _knowledge().save_report(
+                request.project_id, request.question, payload["report"]
+            )
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="Unknown project") from error
     return payload
 
 
@@ -261,16 +336,23 @@ def ask_stream(request: AskRequest) -> StreamingResponse:
                     )
                 if source_warning:
                     state.warnings.insert(0, source_warning)
+                report_markdown = render_markdown(state)
+                archived_report = None
+                if request.project_id:
+                    archived_report = _knowledge().save_report(
+                        request.project_id, request.question, report_markdown
+                    )
                 publish(
                     "completed",
                     state=state.model_dump(mode="json"),
-                    report=render_markdown(state),
+                    report=report_markdown,
                     report_html=render_html(state, request.locale),
                     report_fragment=render_html_fragment(state, request.locale),
                     report_fragments={
                         "zh": render_html_fragment(state, "zh"),
                         "en": render_html_fragment(state, "en"),
                     },
+                    archived_report=archived_report,
                 )
             except Exception as error:
                 publish("error", message=str(error))

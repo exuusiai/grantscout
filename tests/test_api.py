@@ -50,6 +50,33 @@ def test_knowledge_api_uploads_document(tmp_path, monkeypatch) -> None:
     assert response.json()[0]["project_id"] == project["id"]
 
 
+def test_project_conversation_is_persisted_and_deletable(tmp_path, monkeypatch) -> None:
+    from paperscout.knowledge import KnowledgeService
+
+    app.state.knowledge = KnowledgeService(tmp_path)
+    monkeypatch.setattr(
+        "paperscout.api.app.understand_request",
+        lambda messages, settings, locale: ConversationResult(
+            status="clarification", message="Which scope?"
+        ),
+    )
+    client = TestClient(app)
+    project = client.post("/api/projects", json={"name": "Agent workspace"}).json()
+    result = client.post(
+        "/api/chat",
+        json={
+            "project_id": project["id"],
+            "messages": [{"role": "user", "content": "Find infrastructure papers"}],
+            "locale": "en",
+        },
+    ).json()
+
+    conversation = client.get(f"/api/conversations/{result['conversation_id']}").json()
+    assert [message["role"] for message in conversation["messages"]] == ["user", "assistant"]
+    assert client.delete(f"/api/conversations/{result['conversation_id']}").status_code == 204
+    assert client.delete(f"/api/projects/{project['id']}").status_code == 204
+
+
 def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
     response = TestClient(app).get("/")
 
@@ -86,6 +113,9 @@ def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
     assert "status.textContent=t('autoStarting')" in response.text
     assert 'id="source-project"' in response.text
     assert "project_id:project.value||null" in response.text
+    assert 'id="conversation"' in response.text
+    assert "deleteCurrentProject" in response.text
+    assert "archived_report" in response.text
 
 
 def test_arxiv_failure_is_visible_instead_of_returning_local_results(monkeypatch) -> None:

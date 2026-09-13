@@ -153,6 +153,12 @@ class CorpusStore:
                 ],
             )
 
+    def delete(self, paper_id: str) -> None:
+        with self.connection:
+            if self.fts_available:
+                self.connection.execute("DELETE FROM evidence_fts WHERE paper_id = ?", (paper_id,))
+            self.connection.execute("DELETE FROM papers WHERE id = ?", (paper_id,))
+
     def paper_count(self) -> int:
         row = self.connection.execute("SELECT COUNT(*) AS count FROM papers").fetchone()
         return int(row["count"])
