@@ -1,4 +1,5 @@
 from io import BytesIO
+from urllib.error import HTTPError
 
 from paperscout.retrieval.arxiv import build_arxiv_query, search_arxiv
 
@@ -37,3 +38,21 @@ def test_arxiv_atom_results_become_parsed_papers(monkeypatch) -> None:
     assert results[0].paper.year == 2024
     assert results[0].paper.source_path == "https://arxiv.org/abs/2402.03300v3"
     assert "Group Relative Policy Optimization" in results[0].evidence_items[0].text
+
+
+def test_arxiv_uses_cached_results_after_rate_limit(tmp_path, monkeypatch) -> None:
+    responses = iter([Response(ATOM), HTTPError("url", 429, "rate limited", {}, None)])
+
+    def urlopen(request, timeout):
+        response = next(responses)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    first = search_arxiv("GRPO", max_results=1, cache_dir=tmp_path, max_retries=0)
+    cached = search_arxiv("GRPO", max_results=1, cache_dir=tmp_path, max_retries=0)
+
+    assert cached == first
+    assert len(list(tmp_path.glob("*.json"))) == 1

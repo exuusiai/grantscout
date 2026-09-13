@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from queue import Queue
 from threading import Thread
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from paperscout.agent.loop import PaperScoutAgent
 from paperscout.config import Settings, get_settings
-from paperscout.reports.renderer import render_html, render_markdown
+from paperscout.reports.renderer import render_html, render_html_fragment, render_markdown
 from paperscout.retrieval.arxiv import ArxivSearchError, search_arxiv
 from paperscout.retrieval.store import CorpusStore
 
@@ -24,6 +24,7 @@ class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=2000)
     corpus: str | None = None
     source: str = Field(default="arxiv", pattern="^(arxiv|local)$")
+    locale: Literal["zh", "en"] = "zh"
 
 
 def _corpus_path(request: AskRequest, settings: Settings) -> Path:
@@ -50,6 +51,7 @@ def _prepare_source(request: AskRequest, settings: Settings) -> tuple[Path, Sett
             max_results=settings.arxiv_max_results,
             timeout_seconds=settings.arxiv_timeout_seconds,
             api_url=settings.arxiv_api_url,
+            cache_dir=Path(settings.data_dir) / "arxiv-cache",
         )
         if not documents:
             raise ArxivSearchError("arXiv returned no matching papers")
@@ -89,7 +91,8 @@ def ask(request: AskRequest) -> dict[str, object]:
         state.warnings.insert(0, source_warning)
     payload = state.model_dump(mode="json")
     payload["report"] = render_markdown(state)
-    payload["report_html"] = render_html(state)
+    payload["report_html"] = render_html(state, request.locale)
+    payload["report_fragment"] = render_html_fragment(state, request.locale)
     return payload
 
 
@@ -134,7 +137,8 @@ def ask_stream(request: AskRequest) -> StreamingResponse:
                     "completed",
                     state=state.model_dump(mode="json"),
                     report=render_markdown(state),
-                    report_html=render_html(state),
+                    report_html=render_html(state, request.locale),
+                    report_fragment=render_html_fragment(state, request.locale),
                 )
             except Exception as error:
                 publish("error", message=str(error))
@@ -157,6 +161,7 @@ def ask_stream(request: AskRequest) -> StreamingResponse:
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
+    return Path(__file__).with_name("index.html").read_text(encoding="utf-8")
     return """<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PaperScout</title>

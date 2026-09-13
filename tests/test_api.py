@@ -23,11 +23,16 @@ def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
     assert '<html lang="zh-CN">' in response.text
     assert "开始综述" in response.text
     assert "PaperScout 论文侦察" in response.text
-    assert '<option value="arxiv" selected>' in response.text
+    assert "就绪 / Ready" not in response.text
+    assert "运行进度 / Timeline" not in response.text
+    assert 'value="arxiv" selected' in response.text
     assert "正在分析，请稍候" in response.text
     assert "buffer.split('\\n')" in response.text
     assert "buffer.split('\n')" not in response.text
     assert "finally{run.disabled=false" in response.text
+    assert '<article id="report"' in response.text
+    assert "report.innerHTML=event.report_fragment" in response.text
+    assert "locale})" in response.text
 
 
 def test_arxiv_failure_is_visible_instead_of_returning_local_results(monkeypatch) -> None:
@@ -67,3 +72,5 @@ def test_api_streams_tool_events_and_final_report(tmp_path, monkeypatch) -> None
     assert any(event["type"] == "tool_call" for event in events)
     assert events[-1]["type"] == "completed"
     assert "## Citation Audit" in events[-1]["report"]
+    assert "<h1>PaperScout 研究笔记" in events[-1]["report_fragment"]
+    assert "<article" not in events[-1]["report_fragment"]

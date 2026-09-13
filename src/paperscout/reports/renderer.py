@@ -142,7 +142,7 @@ def render_markdown(state: ResearchState) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_html(state: ResearchState) -> str:
+def _render_html_english(state: ResearchState) -> str:
     """Render a self-contained HTML report with evidence anchors and citations."""
     duration = _duration_seconds(state)
     model_calls = sum(call.tool.startswith("model_") for call in state.tool_history)
@@ -199,6 +199,69 @@ def render_html(state: ResearchState) -> str:
 <h2>Citation Audit</h2><p>Status: <strong>{audit_status}</strong></p><ul>{audit_items}</ul>
 <h2>Run Metadata</h2><ul><li>Run ID: <code>{escape(state.run_id)}</code></li><li>Status: {escape(state.status)}</li><li>Duration seconds: {duration if duration is not None else 'in progress'}</li><li>Tool calls: {len(state.tool_history)}</li><li>Failed tool calls: {sum(call.status == 'error' for call in state.tool_history)}</li><li>Model calls: {model_calls}</li></ul>
 </body></html>"""
+
+
+_ZH_REPORT_COPY = {
+    '<html lang="en">': '<html lang="zh-CN">',
+    "PaperScout Report": "PaperScout 研究笔记",
+    "Executive Summary": "摘要",
+    "System synthesis:": "系统汇总：",
+    "paper(s), retrieved": "篇论文，检索到",
+    "evidence item(s), and produced": "条证据，并生成",
+    "traceable claim(s).": "条可追溯结论。",
+    "Model-assisted calls:": "模型辅助调用：",
+    "findings remain bounded by retrieved evidence IDs and citation audit.": "所有发现均受检索证据编号与引用审计约束。",
+    "Research Question Decomposition": "研究问题拆解",
+    "Selected Papers": "入选论文",
+    "Main Findings": "主要发现",
+    "Method Comparison": "方法对比",
+    "Dataset and Experimental Setup Comparison": "数据集与实验设置对比",
+    "Limitations": "局限性",
+    "Conflicting Evidence": "冲突证据",
+    "Open Questions": "待解决问题",
+    "Evidence Table": "证据表",
+    "Evidence ID": "证据编号",
+    "<th>Paper</th>": "<th>论文</th>",
+    "Page": "页码",
+    "Text": "原文",
+    "Citation Audit": "引用审计",
+    "Run Metadata": "运行信息",
+    "Run ID:": "运行编号：",
+    "Status:": "状态：",
+    "Duration seconds:": "耗时（秒）：",
+    "Tool calls:": "工具调用：",
+    "Failed tool calls:": "失败工具调用：",
+    "Model calls:": "模型调用：",
+    "No local paper matched.": "未找到匹配论文。",
+    "No traceable claims were generated.": "未生成可追溯结论。",
+    "No cross-paper conflict was detected in the retrieved evidence.": "检索证据中未发现跨论文冲突。",
+    "No limitations were extracted from retrieved evidence.": "检索证据中未提取到局限性。",
+    "Citation audit was not run.": "未运行引用审计。",
+    "No sub-question generated.": "未生成子问题。",
+    "No structured facts were extracted.": "未提取到结构化事实。",
+    "No evidence was retrieved.": "未检索到证据。",
+    "Which experimental conditions would change these evidence-backed findings?": "哪些实验条件可能改变这些有证据支持的发现？",
+    "Not Extracted": "未提取",
+    "supported": "有支持",
+    "needs review": "需复核",
+    "disabled": "未启用",
+    "in progress": "进行中",
+}
+
+
+def render_html(state: ResearchState, locale: str = "en") -> str:
+    """Render a self-contained, localized HTML research note."""
+    document = _render_html_english(state)
+    if locale == "zh":
+        for source, target in _ZH_REPORT_COPY.items():
+            document = document.replace(source, target)
+    return document
+
+
+def render_html_fragment(state: ResearchState, locale: str = "en") -> str:
+    """Return only the trusted report body for embedding in the web interface."""
+    document = render_html(state, locale)
+    return document.split("<body>", 1)[1].rsplit("</body>", 1)[0]
 
 
 def _evidence_row(item: EvidenceItem, papers: dict[str, str]) -> str:
