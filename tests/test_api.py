@@ -32,11 +32,17 @@ def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
     assert "finally{run.disabled=false" in response.text
     assert '<article id="report"' in response.text
     assert "reportFragments?.[locale]||event.report_fragment" in response.text
-    assert "locale})" in response.text
+    assert "locale,ranking:ranking.value})" in response.text
     assert "reportFragments[locale]" in response.text
     assert "height:420px;overflow-y:auto" in response.text
     assert "toolCopy=" in response.text
     assert 'type="search"' in response.text
+    assert 'id="ranking"' in response.text
+    assert "ranking:ranking.value" in response.text
+    assert 'id="recommendations"' in response.text
+    assert "latestPapers.slice(0,3)" in response.text
+    assert "replace('/abs/','/pdf/')" in response.text
+    assert "window.print()" in response.text
 
 
 def test_arxiv_failure_is_visible_instead_of_returning_local_results(monkeypatch) -> None:
@@ -75,7 +81,9 @@ def test_api_streams_tool_events_and_final_report(tmp_path, monkeypatch) -> None
     assert response.headers["x-accel-buffering"] == "no"
     assert any(event["type"] == "tool_call" for event in events)
     assert events[-1]["type"] == "completed"
-    assert "## Citation Audit" in events[-1]["report"]
+    assert "## Citation Audit" not in events[-1]["report"]
+    assert "## Evidence Table" not in events[-1]["report"]
+    assert "## Run Metadata" not in events[-1]["report"]
     assert "<h1>PaperScout 研究笔记" in events[-1]["report_fragment"]
     assert "<article" not in events[-1]["report_fragment"]
     assert set(events[-1]["report_fragments"]) == {"zh", "en"}

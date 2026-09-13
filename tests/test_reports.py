@@ -4,7 +4,7 @@ from paperscout.models.schemas import Claim, EvidenceItem, Paper, ResearchState
 from paperscout.reports.renderer import render_html, render_markdown
 
 
-def test_reports_include_traceable_evidence_links() -> None:
+def test_reports_are_localized_and_omit_internal_audit_sections() -> None:
     evidence_id = "paper-1:section:0001:evidence:0000"
     state = ResearchState(
         run_id="test-run",
@@ -35,7 +35,9 @@ def test_reports_include_traceable_evidence_links() -> None:
     assert "## Executive Summary" in markdown
     assert "## Dataset and Experimental Setup Comparison" in markdown
     assert "## Open Questions" in markdown
-    assert f'id="evidence-{evidence_id}"' in html
-    assert f'href="#evidence-{evidence_id}"' in html
+    assert "Evidence Table" not in markdown
+    assert "Citation Audit" not in markdown
+    assert "Run Metadata" not in markdown
+    assert f'href="#evidence-{evidence_id}"' not in html
     assert "该方法提高了证据召回率。" in render_html(state, "zh")
     assert "该方法提高了证据召回率。" not in render_html(state, "en")

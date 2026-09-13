@@ -62,12 +62,19 @@ def search_arxiv(
     api_url: str = "https://export.arxiv.org/api/query",
     cache_dir: Path | None = None,
     max_retries: int = 2,
+    ranking: str = "relevance",
+    search_query: str | None = None,
 ) -> list[ParsedPaper]:
-    query = build_arxiv_query(question)
-    cache_path = _cache_path(cache_dir, query, max_results) if cache_dir else None
+    query = search_query or build_arxiv_query(question)
+    cache_path = _cache_path(cache_dir, query, max_results, ranking) if cache_dir else None
     cached = _read_cache(cache_path)
     if cached is not None:
         return cached
+    if ranking == "citations":
+        cited = _search_openalex(query, max_results, timeout_seconds, ranking)
+        if cited:
+            _write_cache(cache_path, cited)
+            return cited
     parameters = urllib.parse.urlencode(
         {
             "search_query": (
@@ -76,7 +83,7 @@ def search_arxiv(
             ),
             "start": 0,
             "max_results": max_results,
-            "sortBy": "submittedDate",
+            "sortBy": "submittedDate" if ranking == "recent" else "relevance",
             "sortOrder": "descending",
         }
     )
@@ -103,7 +110,7 @@ def search_arxiv(
             cached = _read_cache(cache_path)
             if cached is not None:
                 return cached
-            fallback = _search_openalex(query, max_results, timeout_seconds)
+            fallback = _search_openalex(query, max_results, timeout_seconds, ranking)
             if fallback:
                 _write_cache(cache_path, fallback)
                 return fallback
@@ -145,8 +152,8 @@ def search_arxiv(
     return papers
 
 
-def _cache_path(cache_dir: Path, query: str, max_results: int) -> Path:
-    key = hashlib.sha256(f"v2\0{query}\0{max_results}".encode()).hexdigest()
+def _cache_path(cache_dir: Path, query: str, max_results: int, ranking: str) -> Path:
+    key = hashlib.sha256(f"v3\0{query}\0{max_results}\0{ranking}".encode()).hexdigest()
     return cache_dir / f"{key}.json"
 
 
@@ -170,7 +177,9 @@ def _write_cache(cache_path: Path | None, papers: list[ParsedPaper]) -> None:
     )
 
 
-def _search_openalex(query: str, max_results: int, timeout_seconds: float) -> list[ParsedPaper]:
+def _search_openalex(
+    query: str, max_results: int, timeout_seconds: float, ranking: str = "relevance"
+) -> list[ParsedPaper]:
     """Use OpenAlex only as a metadata mirror when the official arXiv API is rate limited."""
     parameters = urllib.parse.urlencode(
         {
@@ -180,6 +189,11 @@ def _search_openalex(query: str, max_results: int, timeout_seconds: float) -> li
                 "primary_topic.field.id:17"
             ),
             "per-page": max_results,
+            "sort": {
+                "recent": "publication_date:desc",
+                "citations": "cited_by_count:desc",
+                "relevance": "relevance_score:desc",
+            }.get(ranking, "relevance_score:desc"),
         }
     )
     request = urllib.request.Request(

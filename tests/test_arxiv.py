@@ -45,6 +45,34 @@ def test_arxiv_atom_results_become_parsed_papers(monkeypatch) -> None:
     assert "Group Relative Policy Optimization" in results[0].evidence_items[0].text
 
 
+def test_recent_ranking_sets_submitted_date_sort(monkeypatch) -> None:
+    seen = {}
+
+    def urlopen(request, timeout):
+        seen["url"] = request.full_url
+        return Response(ATOM)
+
+    monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    search_arxiv("GRPO", max_results=1, ranking="recent")
+
+    assert "sortBy=submittedDate" in seen["url"]
+
+
+def test_citation_ranking_uses_openalex_first(monkeypatch) -> None:
+    seen = {}
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: Response(ATOM))
+
+    def fake_openalex(query, max_results, timeout_seconds, ranking):
+        seen["ranking"] = ranking
+        return search_arxiv("GRPO", max_results=1)
+
+    monkeypatch.setattr("paperscout.retrieval.arxiv._search_openalex", fake_openalex)
+    results = search_arxiv("GRPO", max_results=1, ranking="citations")
+
+    assert results
+    assert seen["ranking"] == "citations"
+
+
 def test_arxiv_uses_cached_results_after_rate_limit(tmp_path, monkeypatch) -> None:
     responses = iter([Response(ATOM), HTTPError("url", 429, "rate limited", {}, None)])
 

@@ -15,7 +15,8 @@ from pydantic import BaseModel, Field
 from paperscout.agent.loop import PaperScoutAgent
 from paperscout.config import Settings, get_settings
 from paperscout.reports.renderer import render_html, render_html_fragment, render_markdown
-from paperscout.retrieval.arxiv import ArxivSearchError, build_arxiv_query, search_arxiv
+from paperscout.retrieval.arxiv import ArxivSearchError, search_arxiv
+from paperscout.retrieval.query_interpreter import interpret_query
 from paperscout.retrieval.store import CorpusStore
 
 app = FastAPI(title="PaperScout", version="0.1.0")
@@ -26,6 +27,18 @@ class AskRequest(BaseModel):
     corpus: str | None = None
     source: str = Field(default="arxiv", pattern="^(arxiv|local)$")
     locale: Literal["zh", "en"] = "zh"
+    ranking: Literal["auto", "relevance", "recent", "citations"] = "auto"
+
+
+def _ranking_for(request: AskRequest) -> str:
+    if request.ranking != "auto":
+        return request.ranking
+    text = request.question.casefold()
+    if any(term in text for term in ("最新", "近期", "recent", "latest", "newest")):
+        return "recent"
+    if any(term in text for term in ("高引用", "经典", "影响力", "citation", "influential")):
+        return "citations"
+    return "relevance"
 
 
 def _corpus_path(request: AskRequest, settings: Settings) -> Path:
@@ -41,12 +54,18 @@ def _require_populated_corpus(corpus_path: Path) -> None:
             raise HTTPException(status_code=422, detail="Corpus contains no papers")
 
 
-def _prepare_source(request: AskRequest, settings: Settings) -> tuple[Path, Settings, str | None, int]:
+def _prepare_source(
+    request: AskRequest, settings: Settings
+) -> tuple[Path, Settings, str | None, int, str | None]:
     if request.source == "local" or request.corpus:
         corpus_path = _corpus_path(request, settings)
         _require_populated_corpus(corpus_path)
-        return corpus_path, settings, None, 0
+        return corpus_path, settings, None, 0, None
     try:
+        search_query, inferred_ranking = interpret_query(request.question, settings)
+        ranking = _ranking_for(request)
+        if request.ranking == "auto" and inferred_ranking:
+            ranking = inferred_ranking
         documents = search_arxiv(
             request.question,
             max_results=settings.arxiv_max_results,
@@ -54,12 +73,13 @@ def _prepare_source(request: AskRequest, settings: Settings) -> tuple[Path, Sett
             api_url=settings.arxiv_api_url,
             cache_dir=Path(settings.data_dir) / "arxiv-cache",
             max_retries=0,
+            ranking=ranking,
+            search_query=search_query,
         )
         if not documents:
             raise ArxivSearchError("arXiv returned no matching papers")
-        search_query = build_arxiv_query(request.question)
         query_key = hashlib.sha256(
-            f"v2\0{request.question.strip().casefold()}\0{search_query}".encode()
+            f"v4\0{request.question.strip().casefold()}\0{search_query}\0{ranking}".encode()
         ).hexdigest()[:16]
         corpus_path = Path(settings.data_dir) / "arxiv-queries" / f"{query_key}.sqlite"
         with CorpusStore(corpus_path) as store:
@@ -68,7 +88,7 @@ def _prepare_source(request: AskRequest, settings: Settings) -> tuple[Path, Sett
         source_settings = settings.model_copy(
             update={"retrieval_mode": "lexical", "max_papers": min(settings.max_papers, 3)}
         )
-        return corpus_path, source_settings, None, len(documents)
+        return corpus_path, source_settings, None, len(documents), search_query
     except ArxivSearchError as error:
         raise ArxivSearchError(
             f"arXiv 暂时不可用，未返回本地 SciFact 结果以避免混入无关论文：{error}"
@@ -90,7 +110,7 @@ def health() -> dict[str, object]:
 def ask(request: AskRequest) -> dict[str, object]:
     settings = get_settings()
     try:
-        corpus_path, agent_settings, source_warning, _ = _prepare_source(request, settings)
+        corpus_path, agent_settings, source_warning, _, search_query = _prepare_source(request, settings)
     except ArxivSearchError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     with CorpusStore(corpus_path) as store:
@@ -101,7 +121,7 @@ def ask(request: AskRequest) -> dict[str, object]:
             output_language=request.locale,
         ).run(
             request.question,
-            search_query=build_arxiv_query(request.question) if request.source == "arxiv" else None,
+            search_query=search_query,
         )
     if source_warning:
         state.warnings.insert(0, source_warning)
@@ -133,7 +153,7 @@ def ask_stream(request: AskRequest) -> StreamingResponse:
             try:
                 publish("started", question=request.question)
                 publish("source_started", source=request.source)
-                corpus_path, agent_settings, source_warning, imported = _prepare_source(
+                corpus_path, agent_settings, source_warning, imported, search_query = _prepare_source(
                     request, settings
                 )
                 publish(
@@ -154,11 +174,7 @@ def ask_stream(request: AskRequest) -> StreamingResponse:
                     )
                     state = agent.run(
                         request.question,
-                        search_query=(
-                            build_arxiv_query(request.question)
-                            if request.source == "arxiv"
-                            else None
-                        ),
+                        search_query=search_query,
                     )
                 if source_warning:
                     state.warnings.insert(0, source_warning)
