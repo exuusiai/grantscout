@@ -2,7 +2,7 @@ import json
 
 from fastapi.testclient import TestClient
 
-from paperscout.api.app import app
+from paperscout.api.app import AskRequest, app
 from paperscout.config import Settings
 from paperscout.retrieval.parser import parse_document
 from paperscout.retrieval.store import CorpusStore
@@ -15,6 +15,11 @@ def test_api_health_has_corpus_status() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_paper_limit_is_bounded_and_can_be_inferred_from_question() -> None:
+    assert AskRequest(question="请分析 12 篇 GRPO 论文").paper_limit == 12
+    assert AskRequest(question="Find GRPO papers", paper_limit=20).paper_limit == 20
 
 
 def test_chat_endpoint_returns_clarification(monkeypatch) -> None:
@@ -48,6 +53,11 @@ def test_knowledge_api_uploads_document(tmp_path, monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json()[0]["project_id"] == project["id"]
+    collected = client.post(
+        "/api/knowledge/collect",
+        json={"project_id": project["id"], "paper": {"id": "arxiv-1", "title": "Saved paper", "abstract": "A useful abstract.", "source_path": "https://arxiv.org/abs/1"}},
+    )
+    assert collected.status_code == 200
 
 
 def test_project_conversation_is_persisted_and_deletable(tmp_path, monkeypatch) -> None:
@@ -116,6 +126,8 @@ def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
     assert 'id="conversation"' in response.text
     assert "deleteCurrentProject" in response.text
     assert "archived_report" in response.text
+    assert 'id="paper-limit"' in response.text
+    assert "app-layout" in response.text
 
 
 def test_arxiv_failure_is_visible_instead_of_returning_local_results(monkeypatch) -> None:

@@ -10,6 +10,14 @@
 - Added conservative reproduction-readiness scores and research decisions. Unknown code, license, dependency, and hardware facts are penalized and listed instead of inferred.
 - Added comparability and research-decision sections to the bilingual report.
 
+### Workspace and external search boundaries
+
+- Reorganized the Web UI into a Codex-style three-pane workspace: project/conversation/private knowledge sidebar, primary chat surface, and collapsible run evidence plus report panel.
+- Added a user-controlled paper investigation limit from 1 to 20 (default 5), with conversation extraction for requests such as "analyze 12 papers".
+- Removed the former hard-coded three-paper arXiv analysis limit.
+- Clarified the storage boundary: external arXiv/OpenAlex search stores only temporary query metadata and abstracts; it never downloads paper PDFs into the private project knowledge base.
+- Added explicit collection of a recommended paper into the current project. Collection stores searchable title, authors, abstract, and source URL only after user action; it does not download the remote PDF.
+
 ## 2026-09-13
 
 ### Retrieval and reporting

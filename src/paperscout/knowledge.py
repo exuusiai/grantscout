@@ -11,7 +11,7 @@ from threading import Lock
 from typing import Callable
 from uuid import uuid4
 
-from paperscout.models.schemas import ParsedPaper
+from paperscout.models.schemas import Paper, ParsedPaper
 from paperscout.retrieval.parser import parse_document
 from paperscout.retrieval.store import CorpusStore
 
@@ -125,6 +125,14 @@ class KnowledgeService:
         self._require(project_id)
         name = f"{title.strip()[:80] or 'Research report'}.md"
         return self.enqueue(project_id, name, markdown.encode("utf-8"))
+
+    def collect_paper(self, project_id: str, paper: Paper) -> dict:
+        authors = ", ".join(paper.authors) or "Unknown"
+        markdown = (
+            f"# {paper.title}\n\n- Authors: {authors}\n- Year: {paper.year or 'Unknown'}\n"
+            f"- Source: {paper.source_path or 'Unknown'}\n\n## Abstract\n\n{paper.abstract}\n"
+        )
+        return self.enqueue(project_id, f"{paper.title[:80]}.md", markdown.encode("utf-8"))
 
     def create_conversation(self, project_id: str, title: str = "New conversation") -> dict:
         self._require(project_id)

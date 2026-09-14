@@ -20,6 +20,9 @@ Question
 - Every run writes a state JSON file, a JSONL tool trajectory, and a Markdown report.
 - The lexical index is dependency-free. The optional semantic index uses BGE-M3 and
   FAISS, with a NumPy fallback when FAISS is unavailable.
+- Project knowledge bases contain only user-uploaded/collected documents and generated
+  reports. External arXiv/OpenAlex searches use query-scoped caches of public metadata
+  and abstracts; PaperScout does not download remote PDFs into project storage.
 
 ## Runtime modes
 

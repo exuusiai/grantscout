@@ -22,6 +22,7 @@ class ConversationResult(BaseModel):
     ranking: Literal["relevance", "recent", "citations"] = "relevance"
     conversation_id: str | None = None
     constraints: ResearchConstraints = Field(default_factory=ResearchConstraints)
+    paper_limit: int = Field(default=5, ge=1, le=20)
 
 
 def understand_request(
@@ -55,7 +56,8 @@ def understand_request(
                         "ranking (relevance, recent, or citations), and constraints with time_range, "
                         "open_source_only, max_model_size, max_vram_gb, dataset_preference, "
                         "code_required, and priority (quality, speed, cost, balanced). Use null for "
-                        "unknown constraints. Do not search yet."
+                        "unknown constraints. Also return paper_limit from 1 to 20 when the user "
+                        "specifies a count; otherwise use 5. Do not search yet."
                     ),
                 },
                 *[message.model_dump() for message in messages],
@@ -92,6 +94,9 @@ def _fallback(question: str, locale: str) -> ConversationResult:
     elif re.search(r"高引用|经典|影响力|citation|influential", text):
         ranking = "citations"
     message = "已理解任务，可以开始检索。" if locale == "zh" else "Task understood. Ready to search."
+    match = re.search(r"(?:调查|查找|分析|阅读)?\s*(\d{1,2})\s*(?:篇|papers?)", question, re.I)
+    paper_limit = max(1, min(20, int(match.group(1)))) if match else 5
     return ConversationResult(
-        status="ready", message=message, refined_question=question, ranking=ranking
+        status="ready", message=message, refined_question=question, ranking=ranking,
+        paper_limit=paper_limit,
     )

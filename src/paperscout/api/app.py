@@ -10,13 +10,13 @@ from typing import Any, Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from paperscout.agent.conversation import ConversationMessage, ConversationResult, understand_request
 from paperscout.agent.loop import PaperScoutAgent
 from paperscout.config import Settings, get_settings
 from paperscout.knowledge import KnowledgeService
-from paperscout.models.schemas import ResearchConstraints
+from paperscout.models.schemas import Paper, ResearchConstraints
 from paperscout.reports.renderer import render_html, render_html_fragment, render_markdown
 from paperscout.retrieval.arxiv import ArxivSearchError, search_arxiv
 from paperscout.retrieval.query_interpreter import interpret_query
@@ -67,6 +67,19 @@ async def upload_documents(
     except ValueError as error:
         raise HTTPException(status_code=415, detail=str(error)) from error
     return tasks
+
+
+class CollectPaperRequest(BaseModel):
+    project_id: str
+    paper: Paper
+
+
+@app.post("/api/knowledge/collect")
+def collect_paper(request: CollectPaperRequest) -> dict:
+    try:
+        return _knowledge().collect_paper(request.project_id, request.paper)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Unknown project") from error
 
 
 @app.get("/api/projects/{project_id}/documents")
@@ -146,6 +159,15 @@ class AskRequest(BaseModel):
     locale: Literal["zh", "en"] = "zh"
     ranking: Literal["auto", "relevance", "recent", "citations"] = "auto"
     constraints: ResearchConstraints = Field(default_factory=ResearchConstraints)
+    paper_limit: int = Field(default=5, ge=1, le=20)
+
+    @model_validator(mode="after")
+    def infer_paper_limit(self) -> "AskRequest":
+        import re
+        match = re.search(r"(?:调查|查找|分析|阅读)?\s*(\d{1,2})\s*(?:篇|papers?)", self.question, re.I)
+        if match:
+            self.paper_limit = max(1, min(20, int(match.group(1))))
+        return self
 
 
 class ChatRequest(BaseModel):
@@ -213,7 +235,7 @@ def _prepare_source(
     if request.source in {"local", "project"} or request.corpus:
         corpus_path = _corpus_path(request, settings)
         _require_populated_corpus(corpus_path)
-        return corpus_path, settings, None, 0, None
+        return corpus_path, settings.model_copy(update={"max_papers": request.paper_limit}), None, 0, None
     try:
         search_query, inferred_ranking = interpret_query(request.question, settings)
         ranking = _ranking_for(request)
@@ -221,7 +243,7 @@ def _prepare_source(
             ranking = inferred_ranking
         documents = search_arxiv(
             request.question,
-            max_results=settings.arxiv_max_results,
+            max_results=max(request.paper_limit, min(settings.arxiv_max_results, 20)),
             timeout_seconds=min(settings.arxiv_timeout_seconds, 5.0),
             api_url=settings.arxiv_api_url,
             cache_dir=Path(settings.data_dir) / "arxiv-cache",
@@ -239,7 +261,7 @@ def _prepare_source(
             for document in documents:
                 store.upsert(document)
         source_settings = settings.model_copy(
-            update={"retrieval_mode": "lexical", "max_papers": min(settings.max_papers, 3)}
+            update={"retrieval_mode": "lexical", "max_papers": request.paper_limit}
         )
         return corpus_path, source_settings, None, len(documents), search_query
     except ArxivSearchError as error:
