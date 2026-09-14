@@ -53,5 +53,14 @@
 
 - Verified project creation and Markdown ingestion through the live server; the test document reached ready at 100% and was searchable in its project corpus.
 - The current deployment is single-node and uses an in-process worker pool plus SQLite FTS. Jobs do not yet survive a process crash.
+
+### 2026-09-14 reliability and model routing
+
+- Removed whole-sidebar polling behavior; the project tree is refreshed only by explicit project/conversation events.
+- Added a compatibility layer so review requests always carry project, locale, ranking, paper count, and research constraints.
+- Added optional `PAPERSCOUT_RESEARCH_MODEL_*` settings for a dedicated local OpenAI-compatible research model. Conversation understanding continues to use the built-in model; paper analysis uses the research profile when configured, with local fallback.
+- Corrected arXiv result sizing to honor the requested limit and configured maximum.
+- Empty project knowledge bases now fall back to arXiv with a visible warning instead of failing on a missing `corpus.sqlite` file. Selecting a project can therefore remain independent from the external paper search scope.
+- Specialized paper analysis now extracts comparison-critical conditions, synthesizes applicability boundaries, and reports three-state comparability (`comparable`, `condition_mismatch`, `insufficient_evidence`) with five-axis values and evidence references. Pairwise comparison is bounded to the eight most evidence-rich papers to keep 20-paper reviews useful and tractable.
 - Project isolation is a storage boundary, not authentication or authorization.
 - Persistent chat memory, PII redaction, layout-aware table/formula recovery, reviewed comparability judgments, reproducibility scoring, collaboration audit history, and scheduled topic monitoring remain gated work recorded in `product-roadmap.md`.

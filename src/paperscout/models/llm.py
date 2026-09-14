@@ -5,7 +5,7 @@ from typing import Any
 
 import httpx
 
-from paperscout.models.endpoints import normalize_local_base_url
+from paperscout.models.endpoints import normalize_local_base_url, normalize_research_base_url
 
 
 class ModelClientError(RuntimeError):
@@ -45,8 +45,9 @@ class OpenAICompatibleClient:
         api_key: str,
         model: str,
         timeout_seconds: float = 120.0,
+        allow_research_endpoint: bool = False,
     ) -> None:
-        self.base_url = normalize_local_base_url(base_url)
+        self.base_url = normalize_research_base_url(base_url) if allow_research_endpoint else normalize_local_base_url(base_url)
         self.api_key = api_key
         self.model = model
         self.timeout_seconds = timeout_seconds

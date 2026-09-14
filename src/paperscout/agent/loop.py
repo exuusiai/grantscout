@@ -42,12 +42,15 @@ class PaperScoutAgent:
         self.rerank_enabled = settings.use_reranker if rerank is None else rerank
         self.conflict_detection_enabled = detect_conflicts
         self.on_tool_call = on_tool_call
+        research_base_url = settings.research_model_base_url or settings.model_base_url
+        research_model = settings.research_model_name or settings.model_name
         self.model_client = (
             OpenAICompatibleClient(
-                base_url=settings.model_base_url,
-                api_key=settings.model_api_key,
-                model=settings.model_name,
+                base_url=research_base_url,
+                api_key=settings.research_model_api_key if settings.research_model_base_url else settings.model_api_key,
+                model=research_model,
                 timeout_seconds=settings.model_timeout_seconds,
+                allow_research_endpoint=bool(settings.research_model_base_url),
             )
             if settings.use_model_reasoning
             else None

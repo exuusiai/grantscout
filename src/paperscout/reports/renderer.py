@@ -76,8 +76,17 @@ def render_markdown(state: ResearchState) -> str:
     if state.comparability:
         lines.extend(["", "## Comparability Gate", ""])
         for item in state.comparability:
-            verdict = "Comparable" if item.comparable else "Not directly comparable"
-            lines.append(f"- `{' / '.join(item.paper_ids)}`: {verdict}. {item.reason}")
+            verdict = {
+                "comparable": "Comparable",
+                "condition_mismatch": "Condition mismatch",
+                "insufficient_evidence": "Insufficient evidence",
+            }[item.status]
+            axes = (
+                f"task={item.task_same}, dataset/split={item.dataset_split_same}, "
+                f"metric={item.metric_same}, scale/budget={item.scale_budget_similar}, "
+                f"conditions={item.conditions_comparable}"
+            )
+            lines.append(f"- `{' / '.join(item.paper_ids)}`: {verdict}. {axes}. {item.reason}")
     lines.extend(["", "## Conflicting Evidence", ""])
     if state.conflicts:
         for conflict in state.conflicts:
@@ -127,7 +136,10 @@ def _render_html_english(state: ResearchState, locale: str = "en") -> str:
     ) or "<li>No cross-paper conflict was detected in the retrieved evidence.</li>"
     comparability = "".join(
         f"<li><code>{escape(' / '.join(item.paper_ids))}</code>: "
-        f"{'Comparable' if item.comparable else 'Not directly comparable'}. {escape(item.reason)}</li>"
+        f"{escape({'comparable': 'Comparable', 'condition_mismatch': 'Condition mismatch', 'insufficient_evidence': 'Insufficient evidence'}[item.status])}. "
+        f"task={item.task_same}; dataset/split={item.dataset_split_same}; metric={item.metric_same}; "
+        f"scale/budget={item.scale_budget_similar}; conditions={item.conditions_comparable}. "
+        f"{escape(item.reason)}</li>"
         for item in state.comparability
     ) or "<li>Not enough paper pairs were available for comparison.</li>"
     decisions = "".join(
@@ -191,6 +203,8 @@ _ZH_REPORT_COPY = {
     "Comparability Gate": "可比性门禁",
     "Comparable": "可直接比较",
     "Not directly comparable": "条件不同，不可直接比较",
+    "Condition mismatch": "条件不一致，不可直接比较",
+    "Insufficient evidence": "证据不足，暂不比较",
     "Not enough paper pairs were available for comparison.": "论文对不足，无法进行可比性判断。",
     "Open Questions": "待解决问题",
     "Research Decisions": "研究决策建议",

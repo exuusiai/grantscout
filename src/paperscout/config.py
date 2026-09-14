@@ -4,7 +4,7 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from paperscout.models.endpoints import normalize_local_base_url
+from paperscout.models.endpoints import normalize_local_base_url, normalize_research_base_url
 
 
 class Settings(BaseSettings):
@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     model_max_tokens: int = Field(default=2048, gt=0, le=32768)
     model_temperature: float = Field(default=0.2, ge=0, le=2)
     use_model_reasoning: bool = False
+    # Optional separate local OpenAI-compatible endpoint for paper analysis.
+    research_model_base_url: str | None = None
+    research_model_api_key: str = "EMPTY"
+    research_model_name: str | None = None
 
     retrieval_mode: str = "lexical"
     embedding_model: str = "BAAI/bge-m3"
@@ -48,6 +52,11 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_model_base_url(cls, value: str) -> str:
         return normalize_local_base_url(value)
+
+    @field_validator("research_model_base_url")
+    @classmethod
+    def normalize_research_model_base_url(cls, value: str | None) -> str | None:
+        return normalize_research_base_url(value) if value else None
 
     def prepare_directories(self, root: Path | None = None) -> None:
         """Create configured storage directories relative to ``root``."""

@@ -28,39 +28,81 @@ def _display(fact, prefer_localized: bool) -> str:
 
 def assess_comparability(facts: list[StructuredFacts]) -> list[ComparabilityAssessment]:
     assessments = []
-    for left, right in combinations(facts, 2):
-        datasets = _overlap(left.datasets, right.datasets)
-        metrics = _overlap(left.metrics, right.metrics)
-        settings = _overlap(left.experimental_settings, right.experimental_settings)
-        task = _overlap(left.methods, right.methods) or _overlap(left.conclusions, right.conclusions)
+    # Pair the evidence-rich papers first. Twenty papers otherwise produce 190
+    # mostly unknown comparisons and obscure the few defensible judgments.
+    ranked = sorted(facts, key=_evidence_richness, reverse=True)[:8]
+    for left, right in combinations(ranked, 2):
+        datasets = _axis_overlap(left.datasets, right.datasets)
+        metrics = _axis_overlap(left.metrics, right.metrics)
+        settings = _axis_overlap(left.experimental_settings, right.experimental_settings)
+        task = _task_overlap(left, right)
         known = [task, datasets, metrics, settings]
         comparable = all(value is True for value in (task, datasets, metrics)) and settings is not False
         if comparable:
+            status = "comparable"
             reason = "Same task, dataset, and metric are evidenced; experimental conditions do not conflict."
         elif any(value is False for value in known):
+            status = "condition_mismatch"
             reason = "Key task, dataset, metric, or experimental conditions differ; do not compare directly."
         else:
+            status = "insufficient_evidence"
             reason = "Insufficient structured evidence to establish five-axis comparability."
         assessments.append(ComparabilityAssessment(
             paper_ids=[left.paper_id, right.paper_id], task_same=task,
             dataset_split_same=datasets, metric_same=metrics,
             scale_budget_similar=settings, conditions_comparable=settings,
-            comparable=comparable, reason=reason,
+            comparable=comparable, status=status,
+            evidence_ids=_evidence_ids(left, right), reason=reason,
         ))
     return assessments
 
 
-def _overlap(left, right) -> bool | None:
+def _evidence_richness(item: StructuredFacts) -> int:
+    return sum(len(getattr(item, field)) for field in (
+        "methods", "datasets", "experimental_settings", "metrics", "conclusions"
+    ))
+
+
+def _evidence_ids(*items: StructuredFacts) -> list[str]:
+    ids = []
+    for item in items:
+        for field in ("methods", "datasets", "experimental_settings", "metrics", "conclusions"):
+            for fact in getattr(item, field):
+                if fact.evidence_id not in ids:
+                    ids.append(fact.evidence_id)
+    return ids[:12]
+
+
+def _task_overlap(left: StructuredFacts, right: StructuredFacts) -> bool | None:
+    # Conclusions often contain the task more explicitly than method names.
+    left_facts = [*left.conclusions, *left.methods]
+    right_facts = [*right.conclusions, *right.methods]
+    return _axis_overlap(left_facts, right_facts)
+
+
+def _axis_overlap(left, right) -> bool | None:
     if not left or not right:
         return None
-    left_tokens = _terms(" ".join(item.text for item in left))
-    right_tokens = _terms(" ".join(item.text for item in right))
-    return bool(left_tokens & right_tokens)
+    left_terms = _terms(" ".join(item.text for item in left))
+    right_terms = _terms(" ".join(item.text for item in right))
+    if not left_terms or not right_terms:
+        return None
+    shared = left_terms & right_terms
+    return len(shared) >= 1
+
+
+def _overlap(left, right) -> bool | None:
+    return _axis_overlap(left, right)
 
 
 def _terms(text: str) -> set[str]:
     import re
-    ignored = {"the", "and", "with", "using", "method", "model", "results", "on", "for"}
+    ignored = {
+        "the", "and", "with", "using", "method", "model", "results", "result",
+        "on", "for", "from", "this", "that", "our", "we", "show", "paper",
+        "approach", "performance", "dataset", "benchmark", "split", "train",
+        "training", "test", "testing", "validation", "evaluation", "set",
+    }
     return {term for term in re.findall(r"[a-z0-9][a-z0-9._-]+", text.lower()) if term not in ignored}
 
 

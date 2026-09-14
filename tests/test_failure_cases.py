@@ -10,7 +10,7 @@ from paperscout.models.schemas import Claim, Fact, StructuredFacts
 from paperscout.retrieval.parser import parse_document
 from paperscout.retrieval.store import CorpusStore
 from paperscout.tools.audit import audit_citations
-from paperscout.tools.comparison import find_contradictions
+from paperscout.tools.comparison import assess_comparability, find_contradictions
 
 
 def test_no_match_retains_missing_evidence_warning(tmp_path: Path) -> None:
@@ -78,6 +78,27 @@ def test_cross_paper_conflict_is_suppressed_without_comparability() -> None:
         StructuredFacts(paper_id="a", conclusions=[positive]),
         StructuredFacts(paper_id="b", conclusions=[negative]),
     ]) == []
+
+
+def test_comparability_distinguishes_mismatch_from_missing_evidence() -> None:
+    common_method = Fact(field="method", text="group relative policy optimization", evidence_id="method")
+    common_metric = Fact(field="metric", text="reward accuracy", evidence_id="metric")
+    left_dataset = Fact(field="dataset", text="GSM8K test split", evidence_id="gsm8k")
+    right_dataset = Fact(field="dataset", text="MATH validation split", evidence_id="math")
+    assessments = assess_comparability([
+        StructuredFacts(paper_id="a", methods=[common_method], metrics=[common_metric], datasets=[left_dataset]),
+        StructuredFacts(paper_id="b", methods=[common_method], metrics=[common_metric], datasets=[right_dataset]),
+    ])
+
+    assert assessments[0].status == "condition_mismatch"
+    assert assessments[0].comparable is False
+    assert {"method", "metric", "gsm8k", "math"}.issubset(assessments[0].evidence_ids)
+
+    missing = assess_comparability([
+        StructuredFacts(paper_id="a", methods=[common_method]),
+        StructuredFacts(paper_id="b", methods=[common_method]),
+    ])
+    assert missing[0].status == "insufficient_evidence"
 
 
 def test_evaluation_query_without_query_field_fails_explicitly(tmp_path: Path) -> None:

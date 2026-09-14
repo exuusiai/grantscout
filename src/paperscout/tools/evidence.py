@@ -72,13 +72,19 @@ def _extract_with_model(
             {
                 "role": "system",
                 "content": (
+                    "You are extracting experimental facts for rigorous cross-paper comparison. "
                     "Extract only evidence-grounded facts from supplied paper evidence. "
                     "Return JSON arrays named methods, datasets, experimental_settings, "
                     "metrics, conclusions, and limitations. Each item must contain text and "
                     "an evidence_id copied exactly from the input. The text field must stay in "
                     "the source language and closely quote the evidence for verification. Also "
                     f"include localized_text translated into {output_language}. Preserve technical "
-                    "terms and model names. Never invent evidence IDs."
+                    "terms and model names. Treat dataset split/version, metric definition and "
+                    "direction, model scale, training budget, hardware, baseline, and numeric "
+                    "result as comparison-critical details. Put scale, budget, hardware, and "
+                    "evaluation protocol in experimental_settings. A conclusion should identify "
+                    "what was compared, on which task, and the result; omit generic motivation. "
+                    "Never invent missing conditions or evidence IDs."
                 ),
             },
             {
@@ -165,9 +171,14 @@ def synthesize_claims(
             {
                 "role": "system",
                 "content": (
-                    "Synthesize the supplied paper evidence into 2-5 concise findings that answer "
+                    "Act as a research analyst, not an abstract summarizer. Synthesize the supplied "
+                    "paper evidence into 2-5 concise findings that answer "
                     "the research question. Paraphrase and combine evidence; do not copy full source "
-                    "sentences. Do not add facts absent from evidence. Return a JSON object with a "
+                    "sentences. Each finding should state the conclusion, its applicable conditions, "
+                    "and uncertainty or missing evidence when material. Distinguish broad agreement "
+                    "from results that only hold for a specific dataset, metric, scale, or budget. "
+                    "Do not call two results conflicting unless their conditions are comparable. "
+                    "Do not add facts absent from evidence. Return a JSON object with a "
                     "claims array. Each claim must have English text, localized_text in "
                     f"{output_language}, and evidence_ids copied exactly from input."
                 ),

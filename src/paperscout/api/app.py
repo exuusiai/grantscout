@@ -232,7 +232,16 @@ def _require_populated_corpus(corpus_path: Path) -> None:
 def _prepare_source(
     request: AskRequest, settings: Settings
 ) -> tuple[Path, Settings, str | None, int, str | None]:
-    if request.source in {"local", "project"} or request.corpus:
+    source_warning = None
+    if request.source == "project" and not request.corpus:
+        corpus_path = _corpus_path(request, settings)
+        if corpus_path.exists():
+            with CorpusStore(corpus_path) as store:
+                if store.paper_count() > 0:
+                    return corpus_path, settings.model_copy(update={"max_papers": request.paper_limit}), None, 0, None
+        source_warning = "当前项目知识库为空，已自动切换为 arXiv 检索。"
+        request = request.model_copy(update={"source": "arxiv"})
+    if request.source == "local" or request.corpus:
         corpus_path = _corpus_path(request, settings)
         _require_populated_corpus(corpus_path)
         return corpus_path, settings.model_copy(update={"max_papers": request.paper_limit}), None, 0, None
@@ -243,7 +252,7 @@ def _prepare_source(
             ranking = inferred_ranking
         documents = search_arxiv(
             request.question,
-            max_results=max(request.paper_limit, min(settings.arxiv_max_results, 20)),
+            max_results=min(request.paper_limit, settings.arxiv_max_results, 20),
             timeout_seconds=min(settings.arxiv_timeout_seconds, 5.0),
             api_url=settings.arxiv_api_url,
             cache_dir=Path(settings.data_dir) / "arxiv-cache",
@@ -263,7 +272,7 @@ def _prepare_source(
         source_settings = settings.model_copy(
             update={"retrieval_mode": "lexical", "max_papers": request.paper_limit}
         )
-        return corpus_path, source_settings, None, len(documents), search_query
+        return corpus_path, source_settings, source_warning, len(documents), search_query
     except ArxivSearchError as error:
         raise ArxivSearchError(
             f"arXiv 暂时不可用，未返回本地 SciFact 结果以避免混入无关论文：{error}"
@@ -323,7 +332,7 @@ def ask(request: AskRequest) -> dict[str, object]:
 def ask_stream(request: AskRequest) -> StreamingResponse:
     """Stream tool outcomes and the final traceable report as NDJSON."""
     settings = get_settings()
-    if request.source in {"local", "project"} or request.corpus:
+    if request.source == "local" or request.corpus:
         _require_populated_corpus(_corpus_path(request, settings))
 
     def stream() -> Iterator[str]:

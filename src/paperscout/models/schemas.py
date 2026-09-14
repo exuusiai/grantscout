@@ -116,6 +116,8 @@ class ComparabilityAssessment(BaseModel):
     scale_budget_similar: bool | None = None
     conditions_comparable: bool | None = None
     comparable: bool = False
+    status: Literal["comparable", "condition_mismatch", "insufficient_evidence"] = "insufficient_evidence"
+    evidence_ids: list[str] = Field(default_factory=list)
     reason: str
 
 
