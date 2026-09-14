@@ -14,6 +14,26 @@ def _citations_html(evidence_ids: Iterable[str]) -> str:
     return ", ".join(f"<code>{escape(value)}</code>" for value in evidence_ids) or "no evidence"
 
 
+def _zh_dynamic_text(value: str) -> str:
+    """Localize deterministic pipeline copy while preserving paper-specific content."""
+    exact = {
+        "Score reflects only evidence recovered from the paper; unknown repository and hardware fields are penalized.": "评分仅依据论文中已恢复的证据；代码仓库和硬件信息未知时会扣分。",
+        "hardware, model scale, and training budget": "硬件、模型规模与训练预算",
+        "dataset and split": "数据集与划分",
+        "metric definition": "指标定义",
+        "official code and runnable commit": "官方代码与可运行提交版本",
+        "license and dependency health": "许可证与依赖健康度",
+        "One or more claims did not pass the evidence overlap check.": "一项或多项结论未通过证据重叠检查。",
+    }
+    return exact.get(value, value)
+
+
+def _truth_label(value: bool | None, locale: str) -> str:
+    if locale != "zh":
+        return str(value)
+    return {True: "是", False: "否", None: "未知"}[value]
+
+
 def _fact_lines(state: ResearchState, field: str) -> list[str]:
     lines = []
     for facts in state.facts:
@@ -124,7 +144,7 @@ def _render_html_english(state: ResearchState, locale: str = "en") -> str:
     findings = "".join(
         "<li>"
         f"{escape(claim.localized_text or claim.text) if locale == 'zh' else escape(claim.text)} "
-        f"[{escape(claim.support_status)}; "
+        f"[{escape(({'supported': '有支持', 'refuted': '被反驳', 'insufficient': '证据不足', 'unknown': '未知'} if locale == 'zh' else {}).get(claim.support_status, claim.support_status))}; "
         f"{_citations_html(claim.evidence_ids)}]"
         "</li>"
         for claim in state.claims
@@ -136,22 +156,26 @@ def _render_html_english(state: ResearchState, locale: str = "en") -> str:
     ) or "<li>No cross-paper conflict was detected in the retrieved evidence.</li>"
     comparability = "".join(
         f"<li><code>{escape(' / '.join(item.paper_ids))}</code>: "
-        f"{escape({'comparable': 'Comparable', 'condition_mismatch': 'Condition mismatch', 'insufficient_evidence': 'Insufficient evidence'}[item.status])}. "
-        f"task={item.task_same}; dataset/split={item.dataset_split_same}; metric={item.metric_same}; "
-        f"scale/budget={item.scale_budget_similar}; conditions={item.conditions_comparable}. "
-        f"{escape(item.reason)}</li>"
+        f"{escape(({'comparable': '可直接比较', 'condition_mismatch': '条件不一致，不可直接比较', 'insufficient_evidence': '证据不足，暂不比较'} if locale == 'zh' else {'comparable': 'Comparable', 'condition_mismatch': 'Condition mismatch', 'insufficient_evidence': 'Insufficient evidence'})[item.status])}. "
+        f"{('任务' if locale == 'zh' else 'task')}={_truth_label(item.task_same, locale)}; "
+        f"{('数据集/划分' if locale == 'zh' else 'dataset/split')}={_truth_label(item.dataset_split_same, locale)}; "
+        f"{('指标' if locale == 'zh' else 'metric')}={_truth_label(item.metric_same, locale)}; "
+        f"{('规模/预算' if locale == 'zh' else 'scale/budget')}={_truth_label(item.scale_budget_similar, locale)}; "
+        f"{('实验条件' if locale == 'zh' else 'conditions')}={_truth_label(item.conditions_comparable, locale)}. "
+        f"{escape(_zh_dynamic_text(item.reason) if locale == 'zh' else item.reason)}</li>"
         for item in state.comparability
     ) or "<li>Not enough paper pairs were available for comparison.</li>"
     decisions = "".join(
-        f"<li><code>{escape(item.paper_id)}</code>: {escape(item.recommendation)}; "
-        f"readiness {item.readiness_score}/100. {escape(item.reason)} "
-        f"Missing: {escape('; '.join(item.missing_information) or 'none')}.</li>"
+        f"<li><code>{escape(item.paper_id)}</code>: {escape(({'reproduce': '建议复现', 'read': '建议阅读', 'defer': '暂缓'} if locale == 'zh' else {}).get(item.recommendation, item.recommendation))}; "
+        f"{('复现准备度' if locale == 'zh' else 'readiness')} {item.readiness_score}/100. "
+        f"{escape(_zh_dynamic_text(item.reason) if locale == 'zh' else item.reason)} "
+        f"{('尚缺：' if locale == 'zh' else 'Missing: ')}{escape('; '.join(_zh_dynamic_text(value) for value in item.missing_information) or ('无' if locale == 'zh' else 'none'))}.</li>"
         for item in state.decisions
     ) or "<li>No candidate was available for a research decision.</li>"
     limitations = _facts_html(state, "limitations", locale) or (
         "<li>No limitations were extracted from retrieved evidence.</li>"
     )
-    open_questions = "".join(f"<li>{escape(warning)}</li>" for warning in state.warnings) or (
+    open_questions = "".join(f"<li>{escape(_zh_dynamic_text(warning) if locale == 'zh' else warning)}</li>" for warning in state.warnings) or (
         "<li>Which experimental conditions would change these evidence-backed findings?</li>"
     )
     decomposed_questions = "".join(

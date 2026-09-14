@@ -67,3 +67,9 @@
 - Sidebar projects and conversations now use explicit selected states, ellipsis for long titles, and hover-only delete actions with confirmation.
 - Project isolation is a storage boundary, not authentication or authorization.
 - Persistent chat memory, PII redaction, layout-aware table/formula recovery, reviewed comparability judgments, reproducibility scoring, collaboration audit history, and scheduled topic monitoring remain gated work recorded in `product-roadmap.md`.
+# 2026-09-14：中文报告、侧栏稳定性与知识库查询
+
+- 中文研究笔记现在会本地化支持状态、可比性维度、复现建议、缺失信息和流水线告警，不再只替换章节标题。
+- 左侧项目与对话点击改为局部更新选中态，避免重新请求并重建整棵侧栏造成闪烁。
+- 上传不再悄悄改变当前论文来源；已解析资料增加“查询”入口，可明确切换到当前项目知识库并继续对话检索。
+- 在 AutoDL 已入库 PPTX 上验证了项目语料可检索，确认解析与索引链路正常。
