@@ -17,6 +17,7 @@
 - Removed the former hard-coded three-paper arXiv analysis limit.
 - Clarified the storage boundary: external arXiv/OpenAlex search stores only temporary query metadata and abstracts; it never downloads paper PDFs into the private project knowledge base.
 - Added explicit collection of a recommended paper into the current project. Collection stores searchable title, authors, abstract, and source URL only after user action; it does not download the remote PDF.
+- Reworked the sidebar to match a conventional Codex-style model application: persistent brand and new-chat action, expandable project folders with nested conversations, and secondary knowledge/project administration anchored at the bottom. The global duplicate header was removed and the report gained an independent visibility toggle.
 
 ## 2026-09-13
 
