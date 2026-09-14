@@ -54,7 +54,7 @@
 - Verified project creation and Markdown ingestion through the live server; the test document reached ready at 100% and was searchable in its project corpus.
 - The current deployment is single-node and uses an in-process worker pool plus SQLite FTS. Jobs do not yet survive a process crash.
 
-### 2026-09-14 reliability and model routing
+### Reliability and model routing
 
 - Removed whole-sidebar polling behavior; the project tree is refreshed only by explicit project/conversation events.
 - Added a compatibility layer so review requests always carry project, locale, ranking, paper count, and research constraints.
@@ -67,7 +67,7 @@
 - Sidebar projects and conversations now use explicit selected states, ellipsis for long titles, and hover-only delete actions with confirmation.
 - Project isolation is a storage boundary, not authentication or authorization.
 - Persistent chat memory, PII redaction, layout-aware table/formula recovery, reviewed comparability judgments, reproducibility scoring, collaboration audit history, and scheduled topic monitoring remain gated work recorded in `product-roadmap.md`.
-# 2026-09-14：中文报告、侧栏稳定性与知识库查询
+### 中文报告、侧栏稳定性与知识库查询
 
 - 中文研究笔记现在会本地化支持状态、可比性维度、复现建议、缺失信息和流水线告警，不再只替换章节标题。
 - 左侧项目与对话点击改为局部更新选中态，避免重新请求并重建整棵侧栏造成闪烁。

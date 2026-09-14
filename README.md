@@ -52,6 +52,10 @@ paperscout serve --host 127.0.0.1 --port 8000
 
 打开 `http://127.0.0.1:8000/` 即可使用 Web 界面。
 
+Web 端默认使用中文和 arXiv。创建项目后，可以批量上传 MD、PDF、PPTX
+或 TXT；文件状态变为 `ready` 后，点击资料右侧的“查询”即可把当前对话的
+检索范围切换到该项目知识库。上传本身不会悄悄改变当前的 arXiv 数据源。
+
 命令行示例：
 
 ```bash
@@ -113,6 +117,11 @@ python -m pytest -q
 
 当前 Qasper 检索实验中，`top-k=10` 的证据召回率为 `0.6653`，`top-k=5` 为 `0.4849`。跨论文冲突评测与 SciFact 的 claim-evidence 标签严格分离；现有模型试标数据只能用于误报诊断，不能作为正式人工 ground truth 或冲突召回率依据。
 
+2026-09-14 的 Web、报告和知识库定向回归测试为 `19 passed`。AutoDL
+实测项目库中，已解析的 PPTX 可通过 SQLite FTS 检索。该结果验证的是上传、
+解析、热入库和查询链路，不代表 PDF 全文结构恢复或跨论文冲突指标已经达到
+生产标准。
+
 ## 当前边界
 
 - arXiv 路径目前主要依赖题录和摘要，尚未完整恢复 PDF/TeX 中的表格、公式、图表和附录。
@@ -129,6 +138,8 @@ python -m pytest -q
 - [已知失败案例](docs/failure_cases.md)
 - [SciFact 检索对比](docs/scifact-retrieval-comparison.md)
 - [开发记录](docs/development-log.md)
+- [当前验证状态](docs/validation.md)
+- [产品路线图](docs/product-roadmap.md)
 
 ## 开源定位
 

@@ -1,5 +1,21 @@
 # Human and NLI Validation
 
+## Current engineering validation
+
+As of 2026-09-14, the focused Web/report/knowledge regression suite passes 19 tests.
+The live AutoDL corpus was also checked with previously uploaded PPTX documents: the
+documents were `ready`, present in project-isolated SQLite corpora, and returned by an
+FTS query. This validates the current upload-to-search path only.
+
+The Chinese report regression checks localized claim status, comparability verdicts,
+five comparison axes, reproduction recommendations, deterministic readiness reasons,
+and missing-information labels. It also checks that the corresponding fixed English
+pipeline phrases do not leak into the Chinese fragment. Paper-specific free-form text
+can remain in its source language when no trustworthy localized field exists.
+
+These checks do not establish production retrieval quality, PDF layout fidelity,
+conflict precision/recall, or multi-user isolation. Those require the evaluations below.
+
 PaperScout separates two tasks that require different labels:
 
 1. **Claim-evidence entailment** asks whether a cited passage supports,
