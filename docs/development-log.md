@@ -62,5 +62,8 @@
 - Corrected arXiv result sizing to honor the requested limit and configured maximum.
 - Empty project knowledge bases now fall back to arXiv with a visible warning instead of failing on a missing `corpus.sqlite` file. Selecting a project can therefore remain independent from the external paper search scope.
 - Specialized paper analysis now extracts comparison-critical conditions, synthesizes applicability boundaries, and reports three-state comparability (`comparable`, `condition_mismatch`, `insufficient_evidence`) with five-axis values and evidence references. Pairwise comparison is bounded to the eight most evidence-rich papers to keep 20-paper reviews useful and tractable.
+- arXiv remains the default paper scope, while metadata lookup now prefers OpenAlex's arXiv index on AutoDL and accepts only canonical arXiv records. The official Atom API is retained as a retry fallback, reducing failures caused by `export.arxiv.org` timeouts.
+- Added the public arXiv HTML search as a canonical-record fallback and bounded anonymous lookup latency. Public metadata endpoints may still rate-limit a shared cloud/VPN exit; production reliability requires a provider API key or a dedicated egress address.
+- Sidebar projects and conversations now use explicit selected states, ellipsis for long titles, and hover-only delete actions with confirmation.
 - Project isolation is a storage boundary, not authentication or authorization.
 - Persistent chat memory, PII redaction, layout-aware table/formula recovery, reviewed comparability judgments, reproducibility scoring, collaboration audit history, and scheduled topic monitoring remain gated work recorded in `product-roadmap.md`.

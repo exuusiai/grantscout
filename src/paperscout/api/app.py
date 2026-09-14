@@ -253,10 +253,10 @@ def _prepare_source(
         documents = search_arxiv(
             request.question,
             max_results=min(request.paper_limit, settings.arxiv_max_results, 20),
-            timeout_seconds=min(settings.arxiv_timeout_seconds, 5.0),
+            timeout_seconds=min(settings.arxiv_timeout_seconds, 15.0),
             api_url=settings.arxiv_api_url,
             cache_dir=Path(settings.data_dir) / "arxiv-cache",
-            max_retries=0,
+            max_retries=1,
             ranking=ranking,
             search_query=search_query,
         )

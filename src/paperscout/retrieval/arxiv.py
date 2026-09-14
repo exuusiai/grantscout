@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import re
 import time
@@ -64,17 +65,26 @@ def search_arxiv(
     max_retries: int = 2,
     ranking: str = "relevance",
     search_query: str | None = None,
+    prefer_mirror: bool = True,
 ) -> list[ParsedPaper]:
     query = search_query or build_arxiv_query(question)
     cache_path = _cache_path(cache_dir, query, max_results, ranking) if cache_dir else None
     cached = _read_cache(cache_path)
     if cached is not None:
         return cached
-    if ranking == "citations":
-        cited = _search_openalex(query, max_results, timeout_seconds, ranking)
-        if cited:
-            _write_cache(cache_path, cited)
-            return cited
+    # AutoDL routes to export.arxiv.org are frequently slow. OpenAlex indexes
+    # arXiv metadata and lets us return only records with canonical arXiv URLs;
+    # the official Atom API remains the fallback when the mirror has no result.
+    if prefer_mirror:
+        mirrored = _search_openalex(query, max_results, min(timeout_seconds, 5.0), ranking)
+        if mirrored:
+            _write_cache(cache_path, mirrored)
+            return mirrored
+        web_results = _search_arxiv_html(query, max_results, min(timeout_seconds, 8.0), ranking)
+        if web_results:
+            _write_cache(cache_path, web_results)
+            return web_results
+        return []
     parameters = urllib.parse.urlencode(
         {
             "search_query": (
@@ -87,13 +97,18 @@ def search_arxiv(
             "sortOrder": "descending",
         }
     )
-    request = urllib.request.Request(
-        f"{api_url}?{parameters}",
-        headers={"User-Agent": "PaperScout/0.1 (research literature search)"},
-    )
     last_error: Exception | None = None
     root = None
+    api_urls = [api_url]
+    alternate = "https://arxiv.org/api/query"
+    if api_url.rstrip("/") != alternate:
+        api_urls.append(alternate)
     for attempt in range(max_retries + 1):
+        endpoint = api_urls[min(attempt, len(api_urls) - 1)]
+        request = urllib.request.Request(
+            f"{endpoint}?{parameters}",
+            headers={"User-Agent": "PaperScout/0.1 (research literature search)"},
+        )
         try:
             with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
                 payload = response.read()
@@ -104,12 +119,16 @@ def search_arxiv(
             retryable = not isinstance(error, HTTPError) or error.code in {429, 502, 503, 504}
             if attempt < max_retries and retryable:
                 retry_after = error.headers.get("Retry-After") if isinstance(error, HTTPError) else None
-                delay = float(retry_after) if retry_after and retry_after.isdigit() else 0.5 * (2**attempt)
+                delay = float(retry_after) if retry_after and retry_after.isdigit() else 0.25 * (2**attempt)
                 time.sleep(min(delay, 4.0))
                 continue
             cached = _read_cache(cache_path)
             if cached is not None:
                 return cached
+            fallback = _search_arxiv_html(query, max_results, timeout_seconds, ranking)
+            if fallback:
+                _write_cache(cache_path, fallback)
+                return fallback
             fallback = _search_openalex(query, max_results, timeout_seconds, ranking)
             if fallback:
                 _write_cache(cache_path, fallback)
@@ -150,6 +169,57 @@ def search_arxiv(
     if papers:
         _write_cache(cache_path, papers)
     return papers
+
+
+def _search_arxiv_html(
+    query: str, max_results: int, timeout_seconds: float, ranking: str = "relevance"
+) -> list[ParsedPaper]:
+    """Parse arXiv's public search page when the Atom API is rate limited."""
+    search_parameters = {
+        "query": query,
+        "searchtype": "all",
+        "abstracts": "show",
+        "size": max(25, max_results),
+    }
+    search_parameters["order"] = "-announced_date_first"
+    parameters = urllib.parse.urlencode(search_parameters)
+    request = urllib.request.Request(
+        f"https://arxiv.org/search/?{parameters}",
+        headers={"User-Agent": "PaperScout/0.1 (research literature search)"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            document = response.read().decode("utf-8", errors="replace")
+    except OSError:
+        return []
+
+    papers = []
+    for block in document.split('<li class="arxiv-result">')[1:]:
+        identifier = re.search(r'href="https://arxiv\.org/abs/([^"?]+)"', block)
+        title = re.search(r'<p class="title is-5 mathjax">(.*?)</p>', block, re.DOTALL)
+        abstract = re.search(r'<span class="abstract-full[^>]*>(.*?)<a class=', block, re.DOTALL)
+        authors = re.search(r'<p class="authors">(.*?)</p>', block, re.DOTALL)
+        if not identifier or not title:
+            continue
+        raw_id = identifier.group(1).split("v", 1)[0]
+        clean_title = _strip_html(title.group(1))
+        clean_abstract = _strip_html(abstract.group(1)) if abstract else ""
+        author_names = re.findall(r">([^<>]+)</a>", authors.group(1)) if authors else []
+        year_match = re.match(r"(\d{2})", raw_id)
+        year = 2000 + int(year_match.group(1)) if year_match else None
+        paper = Paper(
+            id=f"arxiv-{raw_id.replace('.', '-')}", title=clean_title,
+            authors=[_strip_html(name) for name in author_names], year=year,
+            abstract=clean_abstract, source_path=f"https://arxiv.org/abs/{raw_id}",
+        )
+        papers.append(build_document(paper, [("Abstract", clean_abstract, None)]))
+        if len(papers) >= max_results:
+            break
+    return papers
+
+
+def _strip_html(value: str) -> str:
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", value)).split())
 
 
 def _cache_path(cache_dir: Path, query: str, max_results: int, ranking: str) -> Path:

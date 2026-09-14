@@ -36,7 +36,7 @@ def test_arxiv_query_translates_common_chinese_ai_topics() -> None:
 def test_arxiv_atom_results_become_parsed_papers(monkeypatch) -> None:
     monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: Response(ATOM))
 
-    results = search_arxiv("GRPO", max_results=1)
+    results = search_arxiv("GRPO", max_results=1, prefer_mirror=False)
 
     assert len(results) == 1
     assert results[0].paper.id == "arxiv-2402-03300v3"
@@ -53,7 +53,7 @@ def test_recent_ranking_sets_submitted_date_sort(monkeypatch) -> None:
         return Response(ATOM)
 
     monkeypatch.setattr("urllib.request.urlopen", urlopen)
-    search_arxiv("GRPO", max_results=1, ranking="recent")
+    search_arxiv("GRPO", max_results=1, ranking="recent", prefer_mirror=False)
 
     assert "sortBy=submittedDate" in seen["url"]
 
@@ -64,7 +64,7 @@ def test_citation_ranking_uses_openalex_first(monkeypatch) -> None:
 
     def fake_openalex(query, max_results, timeout_seconds, ranking):
         seen["ranking"] = ranking
-        return search_arxiv("GRPO", max_results=1)
+        return search_arxiv("GRPO", max_results=1, prefer_mirror=False)
 
     monkeypatch.setattr("paperscout.retrieval.arxiv._search_openalex", fake_openalex)
     results = search_arxiv("GRPO", max_results=1, ranking="citations")
@@ -83,8 +83,10 @@ def test_arxiv_uses_cached_results_after_rate_limit(tmp_path, monkeypatch) -> No
         return response
 
     monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    monkeypatch.setattr("paperscout.retrieval.arxiv._search_openalex", lambda *args: [])
+    monkeypatch.setattr("paperscout.retrieval.arxiv._search_arxiv_html", lambda *args: [])
     monkeypatch.setattr("time.sleep", lambda _: None)
-    first = search_arxiv("GRPO", max_results=1, cache_dir=tmp_path, max_retries=0)
+    first = search_arxiv("GRPO", max_results=1, cache_dir=tmp_path, max_retries=0, prefer_mirror=False)
     cached = search_arxiv("GRPO", max_results=1, cache_dir=tmp_path, max_retries=0)
 
     assert cached == first
@@ -93,7 +95,7 @@ def test_arxiv_uses_cached_results_after_rate_limit(tmp_path, monkeypatch) -> No
 
 def test_arxiv_cache_is_used_without_network_request(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: Response(ATOM))
-    search_arxiv("GRPO", max_results=1, cache_dir=tmp_path)
+    search_arxiv("GRPO", max_results=1, cache_dir=tmp_path, prefer_mirror=False)
 
     def fail_if_called(request, timeout):
         raise AssertionError("network should not be called for a cached query")
