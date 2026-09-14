@@ -55,16 +55,29 @@ def test_cross_paper_conflict_keeps_both_evidence_ids() -> None:
         text="The method fails on the benchmark.",
         evidence_id="negative:section:0001:evidence:0000",
     )
+    shared_dataset = Fact(field="dataset", text="SciFact benchmark", evidence_id="dataset")
+    shared_metric = Fact(field="metric", text="evidence recall", evidence_id="metric")
+    shared_method = Fact(field="method", text="retrieval method", evidence_id="method")
 
     conflicts = find_contradictions(
         [
-            StructuredFacts(paper_id="positive", conclusions=[positive]),
-            StructuredFacts(paper_id="negative", conclusions=[negative]),
+            StructuredFacts(paper_id="positive", conclusions=[positive], datasets=[shared_dataset], metrics=[shared_metric], methods=[shared_method]),
+            StructuredFacts(paper_id="negative", conclusions=[negative], datasets=[shared_dataset], metrics=[shared_metric], methods=[shared_method]),
         ]
     )
 
     assert conflicts[0].positive_evidence_ids == [positive.evidence_id]
     assert conflicts[0].negative_evidence_ids == [negative.evidence_id]
+
+
+def test_cross_paper_conflict_is_suppressed_without_comparability() -> None:
+    positive = Fact(field="conclusion", text="The method improves accuracy.", evidence_id="positive")
+    negative = Fact(field="conclusion", text="The method fails badly.", evidence_id="negative")
+
+    assert find_contradictions([
+        StructuredFacts(paper_id="a", conclusions=[positive]),
+        StructuredFacts(paper_id="b", conclusions=[negative]),
+    ]) == []
 
 
 def test_evaluation_query_without_query_field_fails_explicitly(tmp_path: Path) -> None:

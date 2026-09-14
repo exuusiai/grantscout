@@ -108,6 +108,35 @@ class Conflict(BaseModel):
     negative_evidence_ids: list[str] = Field(default_factory=list)
 
 
+class ComparabilityAssessment(BaseModel):
+    paper_ids: list[str] = Field(min_length=2, max_length=2)
+    task_same: bool | None = None
+    dataset_split_same: bool | None = None
+    metric_same: bool | None = None
+    scale_budget_similar: bool | None = None
+    conditions_comparable: bool | None = None
+    comparable: bool = False
+    reason: str
+
+
+class ResearchConstraints(BaseModel):
+    time_range: str | None = None
+    open_source_only: bool | None = None
+    max_model_size: str | None = None
+    max_vram_gb: int | None = Field(default=None, ge=1, le=10000)
+    dataset_preference: str | None = None
+    code_required: bool | None = None
+    priority: Literal["quality", "speed", "cost", "balanced"] = "balanced"
+
+
+class ResearchDecision(BaseModel):
+    paper_id: str
+    recommendation: Literal["reproduce", "read", "defer"]
+    readiness_score: int = Field(ge=0, le=100)
+    reason: str
+    missing_information: list[str] = Field(default_factory=list)
+
+
 class ToolCall(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     tool: str
@@ -136,6 +165,9 @@ class ResearchState(BaseModel):
     facts: list[StructuredFacts] = Field(default_factory=list)
     claims: list[Claim] = Field(default_factory=list)
     comparison: list[dict[str, Any]] = Field(default_factory=list)
+    comparability: list[ComparabilityAssessment] = Field(default_factory=list)
+    constraints: ResearchConstraints = Field(default_factory=ResearchConstraints)
+    decisions: list[ResearchDecision] = Field(default_factory=list)
     conflicts: list[Conflict] = Field(default_factory=list)
     citation_audit: CitationAudit | None = None
     warnings: list[str] = Field(default_factory=list)

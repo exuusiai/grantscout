@@ -16,6 +16,7 @@ from paperscout.agent.conversation import ConversationMessage, ConversationResul
 from paperscout.agent.loop import PaperScoutAgent
 from paperscout.config import Settings, get_settings
 from paperscout.knowledge import KnowledgeService
+from paperscout.models.schemas import ResearchConstraints
 from paperscout.reports.renderer import render_html, render_html_fragment, render_markdown
 from paperscout.retrieval.arxiv import ArxivSearchError, search_arxiv
 from paperscout.retrieval.query_interpreter import interpret_query
@@ -144,6 +145,7 @@ class AskRequest(BaseModel):
     project_id: str | None = None
     locale: Literal["zh", "en"] = "zh"
     ranking: Literal["auto", "relevance", "recent", "citations"] = "auto"
+    constraints: ResearchConstraints = Field(default_factory=ResearchConstraints)
 
 
 class ChatRequest(BaseModel):
@@ -273,6 +275,7 @@ def ask(request: AskRequest) -> dict[str, object]:
         ).run(
             request.question,
             search_query=search_query,
+            constraints=request.constraints,
         )
     if source_warning:
         state.warnings.insert(0, source_warning)
@@ -333,6 +336,7 @@ def ask_stream(request: AskRequest) -> StreamingResponse:
                     state = agent.run(
                         request.question,
                         search_query=search_query,
+                        constraints=request.constraints,
                     )
                 if source_warning:
                     state.warnings.insert(0, source_warning)

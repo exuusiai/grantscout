@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from paperscout.config import Settings
 from paperscout.models.llm import ModelClientError, OpenAICompatibleClient
+from paperscout.models.schemas import ResearchConstraints
 
 
 class ConversationMessage(BaseModel):
@@ -20,6 +21,7 @@ class ConversationResult(BaseModel):
     refined_question: str | None = None
     ranking: Literal["relevance", "recent", "citations"] = "relevance"
     conversation_id: str | None = None
+    constraints: ResearchConstraints = Field(default_factory=ResearchConstraints)
 
 
 def understand_request(
@@ -50,7 +52,10 @@ def understand_request(
                         "the fully resolved literature task. User corrections override earlier "
                         f"assumptions. Reply in {language}. Return JSON only with status "
                         "(clarification or ready), message, refined_question (null until ready), "
-                        "and ranking (relevance, recent, or citations). Do not search yet."
+                        "ranking (relevance, recent, or citations), and constraints with time_range, "
+                        "open_source_only, max_model_size, max_vram_gb, dataset_preference, "
+                        "code_required, and priority (quality, speed, cost, balanced). Use null for "
+                        "unknown constraints. Do not search yet."
                     ),
                 },
                 *[message.model_dump() for message in messages],

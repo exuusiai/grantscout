@@ -1,5 +1,15 @@
 # Development log
 
+## 2026-09-14
+
+### Reliable comparison and decisions
+
+- Added pairwise five-axis comparability assessments for task, dataset/split, metric, scale/budget, and experimental conditions.
+- Changed contradiction detection to emit conflicts only for paper pairs that pass the comparability gate; missing evidence is reported as insufficient rather than treated as equality.
+- Added structured user constraints for time range, open-source requirement, model size, VRAM, dataset preference, code requirement, and quality/speed/cost priority.
+- Added conservative reproduction-readiness scores and research decisions. Unknown code, license, dependency, and hardware facts are penalized and listed instead of inferred.
+- Added comparability and research-decision sections to the bilingual report.
+
 ## 2026-09-13
 
 ### Retrieval and reporting

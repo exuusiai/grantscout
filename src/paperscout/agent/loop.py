@@ -8,13 +8,13 @@ from uuid import uuid4
 
 from paperscout.config import Settings
 from paperscout.models.llm import OpenAICompatibleClient
-from paperscout.models.schemas import Claim, ResearchState, StructuredFacts, ToolCall
+from paperscout.models.schemas import Claim, ResearchConstraints, ResearchDecision, ResearchState, StructuredFacts, ToolCall
 from paperscout.reports.renderer import render_markdown
 from paperscout.retrieval.store import CorpusStore
 from paperscout.retrieval.semantic import SemanticIndex, SemanticIndexError
 from paperscout.retrieval.reranker import CrossEncoderReranker, RerankerError
 from paperscout.tools.audit import audit_citations
-from paperscout.tools.comparison import compare_papers, find_contradictions
+from paperscout.tools.comparison import assess_comparability, compare_papers, find_contradictions
 from paperscout.tools.evidence import extract_structured_facts, synthesize_claims
 from paperscout.tools.search import retrieve_evidence, search_papers
 
@@ -70,8 +70,8 @@ class PaperScoutAgent:
                 logger.warning("Reranker unavailable; continuing without reranking: %s", error)
                 self.reranker = None
 
-    def run(self, question: str, search_query: str | None = None) -> ResearchState:
-        state = ResearchState(run_id=self._run_id(), question=question)
+    def run(self, question: str, search_query: str | None = None, constraints: ResearchConstraints | None = None) -> ResearchState:
+        state = ResearchState(run_id=self._run_id(), question=question, constraints=constraints or ResearchConstraints())
         self._record(state, "plan_question", {"question": question}, lambda: {"status": "deterministic"})
         state.sub_questions = self._decompose(state, question)
         retrieval_questions = [search_query] if search_query else state.sub_questions
@@ -123,9 +123,11 @@ class PaperScoutAgent:
         state.comparison = compare_papers(
             state.facts, prefer_localized=self.output_language == "zh"
         )
+        state.comparability = assess_comparability(state.facts)
         if self.conflict_detection_enabled:
-            state.conflicts = find_contradictions(state.facts)
+            state.conflicts = find_contradictions(state.facts, state.comparability)
             state.warnings.extend(conflict.message for conflict in state.conflicts)
+        state.decisions = self._research_decisions(state)
         if self.audit_enabled:
             state.citation_audit = audit_citations(state.claims, state.evidence_items)
         if state.citation_audit and state.citation_audit.unsupported_claims:
@@ -134,6 +136,31 @@ class PaperScoutAgent:
         state.finished_at = datetime.now(UTC)
         self._persist(state)
         return state
+
+    @staticmethod
+    def _research_decisions(state: ResearchState) -> list[ResearchDecision]:
+        facts_by_id = {item.paper_id: item for item in state.facts}
+        decisions = []
+        for paper in state.selected_papers[:5]:
+            facts = facts_by_id.get(paper.id)
+            known_setup = bool(facts and facts.experimental_settings)
+            known_dataset = bool(facts and facts.datasets)
+            known_metrics = bool(facts and facts.metrics)
+            score = 25 + 15 * known_setup + 15 * known_dataset + 15 * known_metrics
+            missing = []
+            if not known_setup: missing.append("hardware, model scale, and training budget")
+            if not known_dataset: missing.append("dataset and split")
+            if not known_metrics: missing.append("metric definition")
+            missing.extend(["official code and runnable commit", "license and dependency health"])
+            if state.constraints.code_required is True:
+                score = min(score, 55)
+            recommendation = "reproduce" if score >= 70 else "read" if score >= 40 else "defer"
+            decisions.append(ResearchDecision(
+                paper_id=paper.id, recommendation=recommendation, readiness_score=score,
+                reason="Score reflects only evidence recovered from the paper; unknown repository and hardware fields are penalized.",
+                missing_information=missing,
+            ))
+        return decisions
 
     @staticmethod
     def _run_id() -> str:

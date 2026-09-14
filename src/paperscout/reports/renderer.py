@@ -73,6 +73,11 @@ def render_markdown(state: ResearchState) -> str:
     lines.extend(_comparison_markdown(state, ("datasets", "experimental_settings", "metrics")))
     lines.extend(["", "## Limitations", ""])
     lines.extend(_fact_lines(state, "limitations") or ["- No limitations were extracted from retrieved evidence."])
+    if state.comparability:
+        lines.extend(["", "## Comparability Gate", ""])
+        for item in state.comparability:
+            verdict = "Comparable" if item.comparable else "Not directly comparable"
+            lines.append(f"- `{' / '.join(item.paper_ids)}`: {verdict}. {item.reason}")
     lines.extend(["", "## Conflicting Evidence", ""])
     if state.conflicts:
         for conflict in state.conflicts:
@@ -82,6 +87,16 @@ def render_markdown(state: ResearchState) -> str:
             lines.append(f"- {conflict.message} [{citations}]")
     else:
         lines.append("- No cross-paper conflict was detected in the retrieved evidence.")
+    lines.extend(["", "## Research Decisions", ""])
+    if state.decisions:
+        for decision in state.decisions:
+            missing = "; ".join(decision.missing_information) or "none"
+            lines.append(
+                f"- `{decision.paper_id}`: {decision.recommendation}; readiness "
+                f"{decision.readiness_score}/100. {decision.reason} Missing: {missing}."
+            )
+    else:
+        lines.append("- No candidate was available for a research decision.")
     lines.extend(["", "## Open Questions", ""])
     if state.warnings:
         lines.extend(f"- {warning}" for warning in state.warnings)
@@ -110,6 +125,17 @@ def _render_html_english(state: ResearchState, locale: str = "en") -> str:
         f"{_citations_html([*conflict.positive_evidence_ids, *conflict.negative_evidence_ids])}]</li>"
         for conflict in state.conflicts
     ) or "<li>No cross-paper conflict was detected in the retrieved evidence.</li>"
+    comparability = "".join(
+        f"<li><code>{escape(' / '.join(item.paper_ids))}</code>: "
+        f"{'Comparable' if item.comparable else 'Not directly comparable'}. {escape(item.reason)}</li>"
+        for item in state.comparability
+    ) or "<li>Not enough paper pairs were available for comparison.</li>"
+    decisions = "".join(
+        f"<li><code>{escape(item.paper_id)}</code>: {escape(item.recommendation)}; "
+        f"readiness {item.readiness_score}/100. {escape(item.reason)} "
+        f"Missing: {escape('; '.join(item.missing_information) or 'none')}.</li>"
+        for item in state.decisions
+    ) or "<li>No candidate was available for a research decision.</li>"
     limitations = _facts_html(state, "limitations", locale) or (
         "<li>No limitations were extracted from retrieved evidence.</li>"
     )
@@ -131,7 +157,9 @@ def _render_html_english(state: ResearchState, locale: str = "en") -> str:
 <h2>Method Comparison</h2>{_comparison_html(state, ('methods', 'conclusions', 'limitations'), locale)}
 <h2>Dataset and Experimental Setup Comparison</h2>{_comparison_html(state, ('datasets', 'experimental_settings', 'metrics'), locale)}
 <h2>Limitations</h2><ul>{limitations}</ul>
+<h2>Comparability Gate</h2><ul>{comparability}</ul>
 <h2>Conflicting Evidence</h2><ul>{conflicts}</ul>
+<h2>Research Decisions</h2><ul>{decisions}</ul>
 <h2>Open Questions</h2><ul>{open_questions}</ul>
 </body></html>"""
 
@@ -160,7 +188,15 @@ _ZH_REPORT_COPY = {
     "Not extracted": "未提取",
     "Limitations": "局限性",
     "Conflicting Evidence": "冲突证据",
+    "Comparability Gate": "可比性门禁",
+    "Comparable": "可直接比较",
+    "Not directly comparable": "条件不同，不可直接比较",
+    "Not enough paper pairs were available for comparison.": "论文对不足，无法进行可比性判断。",
     "Open Questions": "待解决问题",
+    "Research Decisions": "研究决策建议",
+    "readiness": "复现准备度",
+    "Missing:": "尚缺：",
+    "No candidate was available for a research decision.": "没有可用于研究决策的候选论文。",
     "Evidence Table": "证据表",
     "Evidence ID": "证据编号",
     "<th>Paper</th>": "<th>论文</th>",
