@@ -1,6 +1,6 @@
 # SciFact Dev Retrieval Comparison
 
-This report compares PaperScout retrieval on the official SciFact dev claims
+This report compares GrantScout retrieval on the official SciFact dev claims
 split. The split contains 300 queries; 188 queries have official evidence
 annotations. Results are reported at `K=5`.
 

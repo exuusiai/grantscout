@@ -16,7 +16,7 @@ can remain in its source language when no trustworthy localized field exists.
 These checks do not establish production retrieval quality, PDF layout fidelity,
 conflict precision/recall, or multi-user isolation. Those require the evaluations below.
 
-PaperScout separates two tasks that require different labels:
+GrantScout separates two tasks that require different labels:
 
 1. **Claim-evidence entailment** asks whether a cited passage supports,
    contradicts, or does not establish one generated claim.
@@ -26,7 +26,7 @@ PaperScout separates two tasks that require different labels:
 
 SciFact SUPPORT/CONTRADICT labels are suitable for the first task. They are not
 ground truth for cross-paper conflict, because they relate one corpus abstract
-to a benchmark claim rather than two PaperScout claims to each other.
+to a benchmark claim rather than two GrantScout claims to each other.
 
 ## Qasper metric contract
 

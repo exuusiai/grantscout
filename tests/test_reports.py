@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from paperscout.models.schemas import (
+from grantscout.models.schemas import (
     Claim,
     ComparabilityAssessment,
     EvidenceItem,
@@ -8,7 +8,7 @@ from paperscout.models.schemas import (
     ResearchDecision,
     ResearchState,
 )
-from paperscout.reports.renderer import render_html, render_markdown
+from grantscout.reports.renderer import render_html, render_markdown
 
 
 def test_reports_are_localized_and_omit_internal_audit_sections() -> None:

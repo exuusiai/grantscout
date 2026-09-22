@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GrantScout 本子工作台</title>
+<style>
+:root{color:#172033;background:#f7fafc;font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+*{box-sizing:border-box}body{margin:0}main{max-width:1200px;margin:auto;padding:24px}
+header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #cbd5e1;padding-bottom:14px}
+h1{font-size:22px;margin:0}a{color:#0f766e}
+table{width:100%;border-collapse:collapse;margin-top:16px;background:#fff}
+th,td{border:1px solid #e2e8f0;padding:8px 10px;font-size:14px;text-align:left}
+th{background:#f1f5f9}
+button{border:1px solid #0f766e;background:#0f766e;color:#fff;border-radius:4px;padding:6px 12px;cursor:pointer;font:inherit}
+button.secondary{background:#fff;color:#0f766e}
+button:disabled{background:#94a3b8;border-color:#94a3b8;cursor:wait}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;background:#e0f2f1;color:#0f766e}
+.badge.material{background:#fef3c7;color:#92400e}
+.badge.manual{background:#e2e8f0;color:#475569}
+.section{background:#fff;border:1px solid #cbd5e1;border-radius:6px;padding:14px 16px;margin-top:14px}
+.section h3{margin:0 0 8px;font-size:15px;display:flex;gap:10px;align-items:center;justify-content:space-between}
+.section pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,Menlo,monospace;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:10px;margin:8px 0}
+.warn{color:#9a3412;font-size:13px}
+.meta{color:#64748b;font-size:13px}
+.toolbar{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}
+table.ind{margin-top:8px}table.ind td,table.ind th{font-size:12px;padding:4px 6px}
+#status{color:#64748b;font-size:14px}
+</style></head><body><main>
+<header><h1>GrantScout 本子工作台</h1><div><a href="/">← 文献调研</a> · <span id="status">就绪</span></div></header>
+<section id="upload-card" class="section">
+  <h3>知识库上传(测试/私域资料入库)</h3>
+  <div class="toolbar">
+    <select id="up-project" style="padding:6px;border:1px solid #94a3b8;border-radius:4px"></select>
+    <select id="up-scope" style="padding:6px;border:1px solid #94a3b8;border-radius:4px">
+      <option value="public">公域</option><option value="private" selected>私域(自动 PII 脱敏)</option>
+    </select>
+    <input type="file" id="up-files" multiple style="font-size:13px">
+    <button id="up-btn">上传并解析</button>
+    <span id="up-status" class="meta"></span>
+  </div>
+  <div id="up-tasks" class="meta" style="margin-top:8px"></div>
+</section>
+<section id="list">
+  <h2 style="font-size:16px;margin-top:20px">提案列表</h2>
+  <table><thead><tr><th>标题</th><th>模板</th><th>状态</th><th>大纲确认</th><th>更新时间</th><th>操作</th></tr></thead>
+  <tbody id="proposal-rows"><tr><td colspan="6" class="meta">加载中…</td></tr></tbody></table>
+</section>
+<section id="detail" style="display:none">
+  <div class="toolbar">
+    <button class="secondary" id="back">← 返回列表</button>
+    <button id="approve">确认大纲(锁定目录)</button>
+    <a id="dl-md" href="#" download>下载 Markdown</a>
+    <a id="dl-docx" href="#" download>下载 DOCX</a>
+  </div>
+  <h2 id="title" style="font-size:18px;margin-top:16px"></h2>
+  <p class="meta" id="subtitle"></p>
+  <div id="outline" class="section"></div>
+  <div id="sections"></div>
+</section>
+<script>
+const $=s=>document.querySelector(s);const status=t=>{$('#status').textContent=t};
+async function jfetch(url,options){const r=await fetch(url,options);if(!r.ok){let m='请求失败';try{m=(await r.json()).detail||m}catch{}throw new Error(m)}return r.json()}
+function esc(s){return String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+async function loadList(){status('加载中…');const items=await jfetch('/api/proposals');
+  const rows=$('#proposal-rows');rows.innerHTML='';
+  if(!items.length){rows.innerHTML='<tr><td colspan="6" class="meta">暂无提案。先用文献调研页 or CLI 生成本子。</td></tr>'}
+  for(const it of items){const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${esc(it.title)}</td><td>${esc(it.template_id)}</td><td>${esc(it.status)}</td>`+
+      `<td>${it.outline_approved?'✅ 已确认':'⏳ 待确认'}</td><td class="meta">${esc((it.updated_at||'').slice(0,19).replace('T',' '))}</td>`+
+      `<td><button onclick="openProposal('${it.id}')">打开</button></td>`;
+    rows.append(tr)}
+  status('就绪')}
+let currentId=null;
+window.openProposal=async function(id){status('加载提案…');currentId=id;
+  const payload=await jfetch('/api/proposals/'+id);renderDetail(payload.document);status('就绪')};
+function renderDetail(doc){$('#list').style.display='none';$('#detail').style.display='block';
+  $('#title').textContent=doc.title;
+  $('#subtitle').textContent=`模板 ${doc.template_id} · ${doc.status} · 提案 ${doc.id}`;
+  $('#dl-md').href=`/api/proposals/${doc.id}/report.md`;$('#dl-docx').href=`/api/proposals/${doc.id}/report.docx`;
+  const approve=$('#approve');
+  if(doc.outline&&doc.outline.approved){approve.textContent='大纲已确认 ✓';approve.disabled=true}
+  else{approve.textContent='确认大纲(锁定目录)';approve.disabled=false;
+    approve.onclick=async()=>{approve.disabled=true;status('提交确认…');
+      try{const payload=await jfetch(`/api/proposals/${doc.id}/outline/approve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:true})});
+        renderDetail(payload.document)}catch(e){status(e.message)}approve.disabled=false}}
+  const outline=$('#outline');
+  outline.innerHTML='<h3>写作大纲'+(doc.outline&&doc.outline.approved?'(已确认)':'(待确认)')+'</h3>'+
+    (doc.outline?doc.outline.sections.map(s=>`<div class="meta">· ${esc(s.title)}(预算 ${s.word_budget} 字)${s.bullet_points.length?':'+esc(s.bullet_points.join(';')):''}</div>`).join(''):'<span class="meta">无大纲</span>');
+  const box=$('#sections');box.innerHTML='';
+  const specTitles={};(doc.outline?doc.outline.sections:[]).forEach(s=>specTitles[s.key]=s.title);
+  for(const [key,versions] of Object.entries(doc.sections)){
+    const draft=versions[versions.length-1];if(!draft)continue;
+    const div=document.createElement('div');div.className='section';
+    const badge=draft.source==='agent'?'<span class="badge">AI 稿 v'+draft.version+'</span>':
+      draft.source==='material'?'<span class="badge material">素材整理稿 v'+draft.version+'</span>':
+      '<span class="badge manual">人工栏目</span>';
+    div.innerHTML=`<h3><span>${esc(specTitles[key]||key)}</span><span>${badge}<span class="meta">${draft.word_count} 字 · 引用 ${draft.citations.length}</span>
+      <button class="secondary" data-regen="${key}">重新生成本节</button></span></h3>`+
+      `<pre>${esc(draft.content_md)}</pre>`+
+      (draft.indicators&&draft.indicators.length?renderIndicatorTable(draft.indicators):'')+
+      (draft.warnings.length?draft.warnings.map(w=>`<div class="warn">⚠ ${esc(w)}</div>`).join(''):'');
+    div.querySelector('[data-regen]').onclick=()=>regenerate(doc.id,key);
+    box.append(div)}
+  if(doc.review){const r=doc.review;const div=document.createElement('div');div.className='section';
+    div.innerHTML=`<h3>自检:${r.status}</h3><div class="meta">引用 ${r.total_citations} 条${r.unverified_citations?',其中 '+r.unverified_citations+' 条未验证!':''}`+
+      (r.budget_warnings.length?';字数告警 '+r.budget_warnings.length+' 条':'')+'</div>'+
+      r.budget_warnings.map(w=>`<div class="warn">⚠ ${esc(w)}</div>`).join('');
+    box.append(div)}}
+function renderIndicatorTable(indicators){let html='<table class="ind"><tr><th>指标名称</th><th>目标值</th><th>测试条件</th><th>测试方法</th><th>验收材料</th><th>来源依据</th></tr>';
+  for(const i of indicators){html+=`<tr><td>${esc(i.name)}</td><td>${esc(i.target_value)}</td><td>${esc(i.test_conditions)}</td><td>${esc(i.test_method)}</td><td>${esc(i.acceptance_materials)}</td><td>${esc(i.source_basis)}</td></tr>`}
+  return html+'</table>'}
+async function regenerate(id,key){status('重新生成 '+key+'…');
+  try{const payload=await jfetch(`/api/proposals/${id}/sections/${key}/regenerate`,{method:'POST'});
+    renderDetail(payload.document);status('已重新生成')}catch(e){status(e.message)}}
+$('#back').onclick=()=>{$('#detail').style.display='none';$('#list').style.display='block';loadList()};
+async function refreshProjects(){try{
+    const projects=await jfetch('/api/projects');const sel=$('#up-project');sel.innerHTML='';
+    for(const p of projects){const o=document.createElement('option');o.value=p.id;o.textContent=p.name;sel.append(o)}
+  }catch(e){}}
+$('#up-btn').onclick=async()=>{const pid=$('#up-project').value;if(!pid){$('#up-status').textContent='先创建项目';return}
+  const files=$('#up-files').files;if(!files.length){$('#up-status').textContent='选择文件';return}
+  const fd=new FormData();fd.append('project_id',pid);fd.append('scope',$('#up-scope').value);
+  for(const f of files)fd.append('files',f);
+  $('#up-status').textContent='上传中…';
+  try{const tasks=await jfetch('/api/knowledge/upload',{method:'POST',body:fd});
+    $('#up-status').textContent=`已排队 ${tasks.length} 个任务`;
+    const poll=setInterval(async()=>{let done=0,lines=[];
+      for(const t of tasks){const d=await jfetch('/api/knowledge/tasks/'+t.id);
+        lines.push(`${d.name}: ${d.status} ${d.progress}%${d.error?' '+d.error:''}`);
+        if(d.status==='ready'||d.status==='failed')done++}
+      $('#up-tasks').innerHTML=lines.join('<br>');
+      if(done===tasks.length){clearInterval(poll);$('#up-status').textContent='全部完成';refreshProjects()}},800)}
+  catch(e){$('#up-status').textContent='失败:'+e.message}};
+refreshProjects();
+loadList().catch(e=>status(e.message));
+</script></body></html>

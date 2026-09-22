@@ -63,7 +63,7 @@ def sha256(path: Path) -> str:
 
 
 def download(url: str, target: Path, timeout: int) -> None:
-    request = urllib.request.Request(url, headers={"User-Agent": "PaperScout/0.1"})
+    request = urllib.request.Request(url, headers={"User-Agent": "GrantScout/0.1"})
     partial = target.with_suffix(target.suffix + ".part")
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response, partial.open("wb") as handle:

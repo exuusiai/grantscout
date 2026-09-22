@@ -2,12 +2,12 @@ import json
 
 from fastapi.testclient import TestClient
 
-from paperscout.api.app import AskRequest, app
-from paperscout.config import Settings
-from paperscout.retrieval.parser import parse_document
-from paperscout.retrieval.store import CorpusStore
-from paperscout.retrieval.arxiv import ArxivSearchError
-from paperscout.agent.conversation import ConversationResult
+from grantscout.api.app import AskRequest, app
+from grantscout.config import Settings
+from grantscout.retrieval.parser import parse_document
+from grantscout.retrieval.store import CorpusStore
+from grantscout.retrieval.arxiv import ArxivSearchError
+from grantscout.agent.conversation import ConversationResult
 
 
 def test_api_health_has_corpus_status() -> None:
@@ -24,8 +24,8 @@ def test_paper_limit_is_bounded_and_can_be_inferred_from_question() -> None:
 
 def test_chat_endpoint_returns_clarification(monkeypatch) -> None:
     monkeypatch.setattr(
-        "paperscout.api.app.understand_request",
-        lambda messages, settings, locale: ConversationResult(
+        "grantscout.api.app.understand_request",
+        lambda messages, settings, locale, memory=None: ConversationResult(
             status="clarification", message="你指的是哪一种基架？"
         ),
     )
@@ -40,7 +40,7 @@ def test_chat_endpoint_returns_clarification(monkeypatch) -> None:
 
 
 def test_knowledge_api_uploads_document(tmp_path, monkeypatch) -> None:
-    from paperscout.knowledge import KnowledgeService
+    from grantscout.knowledge import KnowledgeService
 
     app.state.knowledge = KnowledgeService(tmp_path)
     client = TestClient(app)
@@ -61,12 +61,12 @@ def test_knowledge_api_uploads_document(tmp_path, monkeypatch) -> None:
 
 
 def test_project_conversation_is_persisted_and_deletable(tmp_path, monkeypatch) -> None:
-    from paperscout.knowledge import KnowledgeService
+    from grantscout.knowledge import KnowledgeService
 
     app.state.knowledge = KnowledgeService(tmp_path)
     monkeypatch.setattr(
-        "paperscout.api.app.understand_request",
-        lambda messages, settings, locale: ConversationResult(
+        "grantscout.api.app.understand_request",
+        lambda messages, settings, locale, memory=None: ConversationResult(
             status="clarification", message="Which scope?"
         ),
     )
@@ -93,7 +93,7 @@ def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
     assert response.status_code == 200
     assert '<html lang="zh-CN">' in response.text
     assert "开始综述" in response.text
-    assert "PaperScout 论文侦察" in response.text
+    assert "GrantScout 论文侦察" in response.text
     assert "就绪 / Ready" not in response.text
     assert "运行进度 / Timeline" not in response.text
     assert 'value="arxiv" selected' in response.text
@@ -132,7 +132,7 @@ def test_web_ui_is_chinese_first_and_has_visible_run_feedback() -> None:
 
 def test_arxiv_failure_is_visible_instead_of_returning_local_results(monkeypatch) -> None:
     monkeypatch.setattr(
-        "paperscout.api.app.search_arxiv",
+        "grantscout.api.app.search_arxiv",
         lambda *args, **kwargs: (_ for _ in ()).throw(ArxivSearchError("rate limited")),
     )
 
@@ -151,7 +151,7 @@ def test_api_streams_tool_events_and_final_report(tmp_path, monkeypatch) -> None
     with CorpusStore(corpus) as store:
         store.upsert(parse_document(source, paper_id="stream-paper"))
     monkeypatch.setattr(
-        "paperscout.api.app.get_settings",
+        "grantscout.api.app.get_settings",
         lambda: Settings(data_dir=data_dir, runs_dir=tmp_path / "runs"),
     )
 
@@ -169,6 +169,6 @@ def test_api_streams_tool_events_and_final_report(tmp_path, monkeypatch) -> None
     assert "## Citation Audit" not in events[-1]["report"]
     assert "## Evidence Table" not in events[-1]["report"]
     assert "## Run Metadata" not in events[-1]["report"]
-    assert "<h1>PaperScout 研究笔记" in events[-1]["report_fragment"]
+    assert "<h1>GrantScout 研究笔记" in events[-1]["report_fragment"]
     assert "<article" not in events[-1]["report_fragment"]
     assert set(events[-1]["report_fragments"]) == {"zh", "en"}

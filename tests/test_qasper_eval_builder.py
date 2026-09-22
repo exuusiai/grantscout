@@ -2,9 +2,9 @@ import importlib.util
 import json
 from pathlib import Path
 
-from paperscout.models.schemas import Paper
-from paperscout.retrieval.parser import build_document
-from paperscout.retrieval.store import CorpusStore
+from grantscout.models.schemas import Paper
+from grantscout.retrieval.parser import build_document
+from grantscout.retrieval.store import CorpusStore
 
 
 SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "build_qasper_eval.py"

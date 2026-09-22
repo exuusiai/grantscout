@@ -1,10 +1,10 @@
-from paperscout.agent.conversation import ConversationMessage, understand_request
-from paperscout.config import Settings
+from grantscout.agent.conversation import ConversationMessage, understand_request
+from grantscout.config import Settings
 
 
 def test_ambiguous_term_triggers_clarification_on_model_failure(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "paperscout.agent.conversation.OpenAICompatibleClient.chat_json",
+        "grantscout.agent.conversation.OpenAICompatibleClient.chat_json",
         lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("offline")),
     )
 
@@ -20,7 +20,7 @@ def test_ambiguous_term_triggers_clarification_on_model_failure(tmp_path, monkey
 
 def test_model_can_resolve_follow_up_into_search_task(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "paperscout.agent.conversation.OpenAICompatibleClient.chat_json",
+        "grantscout.agent.conversation.OpenAICompatibleClient.chat_json",
         lambda *args, **kwargs: {
             "status": "ready",
             "message": "已明确为大模型系统基础架构。",

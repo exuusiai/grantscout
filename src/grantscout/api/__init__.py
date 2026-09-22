@@ -1,0 +1,1 @@
+"""Minimal GrantScout web API."""

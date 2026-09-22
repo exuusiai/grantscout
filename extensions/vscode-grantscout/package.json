@@ -1,0 +1,52 @@
+{
+  "name": "grantscout-inline",
+  "displayName": "GrantScout Inline Completion",
+  "description": "Evidence-grounded inline completion for research proposals, backed by your GrantScout library (公域/私域文献检索 + 本地模型补全, 引用可溯源).",
+  "version": "0.2.0",
+  "publisher": "grantscout",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other", "Machine Learning"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "GrantScout",
+      "properties": {
+        "grantscout.endpoint": {
+          "type": "string",
+          "default": "http://127.0.0.1:8000",
+          "description": "GrantScout 服务地址 (grantscout serve)"
+        },
+        "grantscout.corpus": {
+          "type": "string",
+          "default": null,
+          "description": "限定语料库 (data 目录下相对路径);留空使用默认语料"
+        },
+        "grantscout.locale": {
+          "type": "string",
+          "enum": ["zh", "en"],
+          "default": "zh",
+          "description": "补全语言"
+        },
+        "grantscout.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用行内补全"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "grantscout.trigger",
+        "title": "GrantScout: 手动触发补全",
+        "category": "GrantScout"
+      }
+    ]
+  },
+  "scripts": {
+    "package": "npx @vscode/vsce package"
+  }
+}

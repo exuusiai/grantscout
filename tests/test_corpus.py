@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from paperscout.config import Settings
-from paperscout.retrieval.parser import parse_document
-from paperscout.retrieval.store import CorpusStore
-from paperscout.tools.search import retrieve_evidence, search_papers
+from grantscout.config import Settings
+from grantscout.retrieval.parser import parse_document
+from grantscout.retrieval.store import CorpusStore
+from grantscout.tools.search import retrieve_evidence, search_papers
 
 
 def _write_sample(path: Path) -> None:

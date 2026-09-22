@@ -1,0 +1,47 @@
+# 最小可用部署:Deployment + Service + PVC。生产环境建议再配 Ingress 与资源限额。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grantscout-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grantscout
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: grantscout}
+  template:
+    metadata:
+      labels: {app: grantscout}
+    spec:
+      containers:
+        - name: grantscout
+          image: grantscout:0.2.0
+          ports: [{containerPort: 8000}]
+          env:
+            - name: GRANTSCOUT_DATA_DIR
+              value: /app/data
+            - name: GRANTSCOUT_MODEL_BASE_URL
+              value: http://vllm.ml-system.svc:8001/v1
+          volumeMounts:
+            - {name: data, mountPath: /app/data}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: grantscout-data}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grantscout
+spec:
+  selector: {app: grantscout}
+  ports:
+    - port: 80
+      targetPort: 8000

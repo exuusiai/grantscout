@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from paperscout.agent.loop import PaperScoutAgent
-from paperscout.config import Settings
-from paperscout.evaluation.datasets import evaluation_records
-from paperscout.models.schemas import Claim, Fact, StructuredFacts
-from paperscout.retrieval.parser import parse_document
-from paperscout.retrieval.store import CorpusStore
-from paperscout.tools.audit import audit_citations
-from paperscout.tools.comparison import assess_comparability, find_contradictions
+from grantscout.agent.loop import GrantScoutAgent
+from grantscout.config import Settings
+from grantscout.evaluation.datasets import evaluation_records
+from grantscout.models.schemas import Claim, Fact, StructuredFacts
+from grantscout.retrieval.parser import parse_document
+from grantscout.retrieval.store import CorpusStore
+from grantscout.tools.audit import audit_citations
+from grantscout.tools.comparison import assess_comparability, find_contradictions
 
 
 def test_no_match_retains_missing_evidence_warning(tmp_path: Path) -> None:
@@ -23,7 +23,7 @@ def test_no_match_retains_missing_evidence_warning(tmp_path: Path) -> None:
     )
     with CorpusStore(tmp_path / "corpus.sqlite") as store:
         store.upsert(parse_document(source, paper_id="grounded"))
-        state = PaperScoutAgent(store, settings).run("What causes marine coral bleaching?")
+        state = GrantScoutAgent(store, settings).run("What causes marine coral bleaching?")
 
     assert state.selected_papers == []
     assert "No local papers matched the research question." in state.warnings

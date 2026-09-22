@@ -1,16 +1,17 @@
-.venv/
-.env
-.DS_Store
+# ---- 测试语料库:论文/报告不入版本库(发布前无需手工清理) ----
+data/
+runs/
+downloads/
+
+# Python
 __pycache__/
-.pytest_cache/
+*.pyc
 *.egg-info/
-*.py[cod]
-data/*.sqlite
-data/*.db
-data/*.index
-data/*.index.meta.json
-data/raw/*
-data/processed/*
-/models/
-runs/*
-!runs/.gitkeep
+.pytest_cache/
+.venv/
+*.sqlite
+*.sqlite-journal
+
+# 本地服务
+*.log
+.env

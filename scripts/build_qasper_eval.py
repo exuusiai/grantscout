@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build PaperScout evaluation JSONL from a Qasper split and local corpus."""
+"""Build GrantScout evaluation JSONL from a Qasper split and local corpus."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ import re
 from pathlib import Path
 from typing import Any, Iterator
 
-from paperscout.evaluation.datasets import iter_records
-from paperscout.retrieval.store import CorpusStore
+from grantscout.evaluation.datasets import iter_records
+from grantscout.retrieval.store import CorpusStore
 
 
 def _paper_id(record: dict[str, Any], index: int) -> str:

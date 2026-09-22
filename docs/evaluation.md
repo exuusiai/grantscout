@@ -10,10 +10,10 @@ lists:
 Commands:
 
 ```bash
-paperscout evaluate evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
-paperscout benchmark evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
-paperscout ablate evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
-paperscout evaluate-suite evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
+grantscout evaluate evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
+grantscout benchmark evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
+grantscout ablate evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
+grantscout evaluate-suite evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
 ```
 
 `evaluate-suite` writes a timestamped JSON source artifact and a Markdown
@@ -26,7 +26,7 @@ audit, and without conflict detection.
 
 SciFact claims are converted into query records with
 `scripts/build_scifact_eval.py`. The script preserves the official cited paper
-IDs and maps annotated abstract sentence indices to stable PaperScout evidence
+IDs and maps annotated abstract sentence indices to stable GrantScout evidence
 IDs. The resulting file can be evaluated with either retrieval mode:
 
 ```bash
@@ -35,9 +35,9 @@ python scripts/build_scifact_eval.py \
   --corpus-jsonl data/raw/scifact/corpus.jsonl \
   --corpus data/scifact.sqlite \
   --output evals/scifact/dev.jsonl
-paperscout evaluate evals/scifact/dev.jsonl \
+grantscout evaluate evals/scifact/dev.jsonl \
   --corpus data/scifact.sqlite --top-k 5 --mode lexical
-paperscout evaluate evals/scifact/dev.jsonl \
+grantscout evaluate evals/scifact/dev.jsonl \
   --corpus data/scifact.sqlite --top-k 5 --mode semantic
 ```
 
@@ -45,12 +45,12 @@ Qasper is imported as a paper corpus and its question/evidence annotations are
 converted with `scripts/build_qasper_eval.py`:
 
 ```bash
-paperscout ingest-jsonl data/raw/qasper/dev.json --corpus data/qasper.sqlite
+grantscout ingest-jsonl data/raw/qasper/dev.json --corpus data/qasper.sqlite
 python scripts/build_qasper_eval.py \
   --source data/raw/qasper/dev.json \
   --corpus data/qasper.sqlite \
   --output evals/qasper/dev.jsonl
-paperscout evaluate evals/qasper/dev.jsonl \
+grantscout evaluate evals/qasper/dev.jsonl \
   --corpus data/qasper.sqlite --top-k 5 --mode semantic
 ```
 
@@ -58,14 +58,14 @@ Qasper answer quality is not inferred from retrieval scores. The generated
 records retain the official answer payload as `qasper_answer`; answer
 correctness still requires a task-specific QA evaluator or human labels.
 
-PaperScout provides the task-specific evaluator through
+GrantScout provides the task-specific evaluator through
 `evaluate-qasper-answers`. It retrieves evidence, asks only the configured local
 chat-completions endpoint for a typed answer, rejects invented evidence IDs, and
 scores against all Qasper annotators:
 
 ```bash
-PAPERSCOUT_VECTOR_INDEX_PATH=data/qasper.bge-small-en-v1.5.auto.index \
-paperscout evaluate-qasper-answers evals/qasper/dev.jsonl \
+GRANTSCOUT_VECTOR_INDEX_PATH=data/qasper.bge-small-en-v1.5.auto.index \
+grantscout evaluate-qasper-answers evals/qasper/dev.jsonl \
   --corpus data/qasper.sqlite --mode semantic --top-k 5 --workers 4 \
   --checkpoint runs/qasper-answer-predictions.jsonl \
   --output runs/qasper-answer-evaluation.json
@@ -143,14 +143,14 @@ human-readable report at `runs/20260909T174228Z-evaluation-20cb7615.md`.
 | --- | ---: | ---: |
 | Single-pass context | 0.0517 | 0.0333 |
 | Fixed RAG | 0.0517 | 0.0333 |
-| PaperScout Agentic RAG | 0.7452 | 0.5501 |
+| GrantScout Agentic RAG | 0.7452 | 0.5501 |
 | Ablation: without question decomposition | 0.7611 | 0.5693 |
 | Ablation: without reranker | 0.7452 | 0.5501 |
 | Ablation: without citation audit | 0.7452 | 0.5501 |
 | Ablation: without conflict detection | 0.7452 | 0.5501 |
 
 The suite duration was 633.116 seconds. The benchmark table intentionally
-keeps the fixed baselines lexical, while PaperScout Agentic RAG follows the
+keeps the fixed baselines lexical, while GrantScout Agentic RAG follows the
 configured semantic retrieval mode. Citation audit and conflict detection
 affect traceability and warnings; they are not expected to change retrieval
 recall in this implementation.

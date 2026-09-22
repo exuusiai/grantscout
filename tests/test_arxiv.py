@@ -1,7 +1,7 @@
 from io import BytesIO
 from urllib.error import HTTPError
 
-from paperscout.retrieval.arxiv import build_arxiv_query, search_arxiv
+from grantscout.retrieval.arxiv import build_arxiv_query, search_arxiv
 
 
 ATOM = b"""<?xml version="1.0" encoding="UTF-8"?>
@@ -66,7 +66,7 @@ def test_citation_ranking_uses_openalex_first(monkeypatch) -> None:
         seen["ranking"] = ranking
         return search_arxiv("GRPO", max_results=1, prefer_mirror=False)
 
-    monkeypatch.setattr("paperscout.retrieval.arxiv._search_openalex", fake_openalex)
+    monkeypatch.setattr("grantscout.retrieval.arxiv._search_openalex", fake_openalex)
     results = search_arxiv("GRPO", max_results=1, ranking="citations")
 
     assert results
@@ -83,8 +83,8 @@ def test_arxiv_uses_cached_results_after_rate_limit(tmp_path, monkeypatch) -> No
         return response
 
     monkeypatch.setattr("urllib.request.urlopen", urlopen)
-    monkeypatch.setattr("paperscout.retrieval.arxiv._search_openalex", lambda *args: [])
-    monkeypatch.setattr("paperscout.retrieval.arxiv._search_arxiv_html", lambda *args: [])
+    monkeypatch.setattr("grantscout.retrieval.arxiv._search_openalex", lambda *args: [])
+    monkeypatch.setattr("grantscout.retrieval.arxiv._search_arxiv_html", lambda *args: [])
     monkeypatch.setattr("time.sleep", lambda _: None)
     first = search_arxiv("GRPO", max_results=1, cache_dir=tmp_path, max_retries=0, prefer_mirror=False)
     cached = search_arxiv("GRPO", max_results=1, cache_dir=tmp_path, max_retries=0)

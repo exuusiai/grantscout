@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GrantScout 补全试验场</title>
+<style>
+:root{color:#172033;background:#f7fafc;font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+*{box-sizing:border-box}body{margin:0}main{max-width:1100px;margin:auto;padding:24px}
+header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #cbd5e1;padding-bottom:14px}
+h1{font-size:22px;margin:0}a{color:#0f766e}
+textarea{width:100%;min-height:340px;resize:vertical;border:1px solid #94a3b8;border-radius:4px;padding:14px;font:15px/1.7 ui-monospace,Menlo,monospace;margin-top:14px}
+.bar{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;font-size:13px;color:#475569}
+button{border:1px solid #0f766e;background:#0f766e;color:#fff;border-radius:4px;padding:6px 12px;cursor:pointer;font:inherit}
+button.secondary{background:#fff;color:#0f766e}
+#status{font-size:13px;color:#64748b}
+#candidates{margin-top:14px;display:grid;gap:10px}
+.card{background:#fff;border:1px solid #cbd5e1;border-left:4px solid #0f766e;border-radius:6px;padding:10px 14px}
+.card.llm{border-left-color:#7c3aed}.card.lexical,.card.semantic{border-left-color:#0284c7}.card.command{border-left-color:#d97706}
+.card .kind{font-size:12px;color:#64748b;display:flex;justify-content:space-between;align-items:center}
+.card .text{margin:6px 0;white-space:pre-wrap}
+.card button{padding:3px 10px;font-size:13px}
+.cites{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.cite{font-size:12px;background:#e0f2f1;color:#0f766e;border-radius:10px;padding:2px 10px;cursor:pointer}
+.cite.private{background:#fee2e2;color:#b91c1c}
+#source{background:#0f172a;color:#e2e8f0;border-radius:6px;padding:12px;font-size:13px;margin-top:12px;white-space:pre-wrap;display:none}
+.hint{font-size:13px;color:#64748b;margin-top:10px}
+</style></head><body><main>
+<header><h1>补全试验场</h1><div><a href="/proposals">本子工作台</a> · <span id="status">就绪</span></div></header>
+<textarea id="editor" placeholder="在这里写作。试试:&#10;· 输入库内的原句开头,停顿 1 秒,看照抄补全&#10;· 输入中文/英文主题词,看查找补全&#10;· 选中文字后点 /summarize /refine&#10;· 在文中插入 @{time:2023-2024} 等过滤器后再触发"></textarea>
+<div class="bar">
+  <button class="secondary" data-cmd="summarize">/summarize 选中或全文</button>
+  <button class="secondary" data-cmd="refine">/refine 润色选中或全文</button>
+  <button class="secondary" data-cmd="find">/find 选中或全文</button>
+  <span>语料:<input id="corpus" value="data/corpus.sqlite" style="width:220px;padding:4px 8px;border:1px solid #94a3b8;border-radius:4px"></span>
+  <span id="status">就绪</span>
+</div>
+<div id="candidates"></div>
+<div id="source"></div>
+<p class="hint">触发规则:句读(。!?;;..)立即触发;其他输入停顿 1 秒触发;切换候选词边界由后端句级匹配保证。Tab 或点「采纳」插入,Esc 关闭。</p>
+<script>
+const $=s=>document.querySelector(s);const editor=$('#editor');const status=t=>{$('#status').textContent=t};
+let sessionId=Math.random().toString(36).slice(2),reqId=0,timer=null,controller=null,candidates=[];
+function cursorPos(){return editor.selectionStart}
+function splitAtCursor(){const pos=cursorPos();return[editor.value.slice(0,pos),editor.value.slice(pos)]}
+async function jfetch(url,options,ctrl){const r=await fetch(url,{...options,signal:ctrl?.signal});if(!r.ok){let m='请求失败';try{m=(await r.json()).detail||m}catch{}}else return r.json();throw new Error('请求失败')}
+function schedule(immediate){if(timer)clearTimeout(timer);if(controller)controller.abort();
+  timer=setTimeout(trigger,immediate?0:1000)}
+async function trigger(){const[before,after]=splitAtCursor();if(before.trim().length<2)return;
+  reqId+=1;controller=new AbortController();status('补全中…');
+  try{const d=await jfetch('/api/completion',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({prefix:before,suffix:after,session_id:sessionId,request_id:'r'+reqId,corpus:$('#corpus').value,max_candidates:3,mode:lockedMode||'auto'})},controller);
+    if(d.superseded)return;
+    if(lockedMode&&!d.candidates.some(c=>c.kind===lockedMode)){lockedMode=null}
+    render(d.candidates,d.filter_warnings);status(`就绪 · ${d.latency_ms}ms${d.cache_hit?' · 缓存':''}`)}
+  catch(e){if(e.name==='AbortError')return;lockedMode=null;status('失败:'+e.message)}}
+function render(list,warnings){candidates=list;const box=$('#candidates');box.innerHTML='';
+  if(warnings&&warnings.length){const w=document.createElement('div');w.className='hint';w.textContent='⚠ '+warnings.join(' ');box.append(w)}
+  const names={verbatim:'照抄 · 库内原文',lexical:'查找 · 词法检索',semantic:'查找 · 语义检索',llm:'模型续写',command:'命令结果'};
+  list.forEach((c,i)=>{const div=document.createElement('div');div.className='card '+c.kind;
+    div.innerHTML=`<div class="kind"><span>${names[c.kind]||c.kind}${c.trigger?' · '+c.trigger:''}</span><button data-i="${i}">采纳 Tab</button></div>`+
+      `<div class="text">${c.text.replace(/[&<>]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]))}</div>`+
+      `<div class="cites">${c.citations.map((ct,ci)=>`<span class="cite ${ct.scope==='private'?'private':''}" title="${ct.source_url?'点击跳转原文对应页':''}" data-url="${ct.source_url||''}" data-e="${ct.evidence_id}">${ct.scope==='private'?'【私域】':''}${ct.paper_title}${ct.page?' · p'+ct.page:''}</span><span class="cite" style="background:#334155;color:#e2e8f0" title="查看引文片段" data-e="${ct.evidence_id}" data-prev="1">¶</span>`).join('')}</div>`;
+    div.querySelector('button').onclick=()=>accept(i);
+    div.querySelectorAll('.cite').forEach(el=>el.onclick=()=>{
+      if(el.dataset.prev){showSource(el.dataset.e);return}
+      if(el.dataset.url){window.open(el.dataset.url,'_blank')}else{showSource(el.dataset.e)}});
+    box.append(div)})}
+let lockedMode=null;
+function accept(i){const c=candidates[i];if(!c)return;const pos=cursorPos();
+  editor.setRangeText(c.text,pos,pos,'end');$('#candidates').innerHTML='';candidates=[];editor.focus();
+  // 连续补全:接受后以相同类型继续给下一条(模型/照抄类锁定,检索类回到 auto)
+  lockedMode=c.kind==='llm'?'llm':c.kind==='verbatim'?'verbatim':null;
+  schedule(true)}
+async function showSource(eid){try{const d=await jfetch(`/api/evidence/${eid}?corpus=${encodeURIComponent($('#corpus').value)}`);
+  const box=$('#source');box.style.display='block';
+  box.textContent=`【${d.paper_title} · ${d.scope==='private'?'私域':'公域'}】\n`+d.evidence.text;
+  box.scrollIntoView({behavior:'smooth',block:'nearest'})}catch(e){status(e.message)}}
+editor.addEventListener('keydown',e=>{
+  if(e.key==='Tab'&&candidates.length){e.preventDefault();accept(0)}
+  if(e.key==='Escape'){$('#candidates').innerHTML='';candidates=[]}});
+editor.addEventListener('input',()=>{const pos=cursorPos();const ch=editor.value[pos-1]||'';
+  schedule('。!?;;..'.includes(ch)||ch==='\n')});
+document.querySelectorAll('[data-cmd]').forEach(btn=>btn.onclick=async()=>{
+  const cmd=btn.dataset.cmd;const sel=editor.value.slice(editor.selectionStart,editor.selectionEnd)||editor.value;
+  status('/'+cmd+' …');reqId+=1;controller=new AbortController();
+  try{const d=await jfetch('/api/completion',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({command:cmd,command_text:sel,corpus:$('#corpus').value,session_id:sessionId,request_id:'r'+reqId})},controller);
+    render(d.candidates,d.filter_warnings);status('/'+cmd+' 完成 · '+d.latency_ms+'ms')}
+  catch(e){status('失败:'+e.message)}});
+</script></body></html>

@@ -1,7 +1,7 @@
 import time
 
-from paperscout.knowledge import KnowledgeService
-from paperscout.retrieval.store import CorpusStore
+from grantscout.knowledge import KnowledgeService
+from grantscout.retrieval.store import CorpusStore
 
 
 def test_project_upload_is_asynchronous_and_hot_indexed(tmp_path) -> None:

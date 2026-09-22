@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from paperscout.config import Settings
+from grantscout.config import Settings
 
 
 def test_settings_normalize_base_url_and_create_directories(tmp_path: Path) -> None:

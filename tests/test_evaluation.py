@@ -1,11 +1,11 @@
 import json
 from pathlib import Path
 
-from paperscout.evaluation.datasets import ingest_jsonl
-from paperscout.evaluation.metrics import evaluate_queries
-from paperscout.evaluation.suite import persist_evaluation_suite, run_evaluation_suite
-from paperscout.config import Settings
-from paperscout.retrieval.store import CorpusStore
+from grantscout.evaluation.datasets import ingest_jsonl
+from grantscout.evaluation.metrics import evaluate_queries
+from grantscout.evaluation.suite import persist_evaluation_suite, run_evaluation_suite
+from grantscout.config import Settings
+from grantscout.retrieval.store import CorpusStore
 
 
 def test_jsonl_ingestion_and_retrieval_metrics(tmp_path: Path) -> None:

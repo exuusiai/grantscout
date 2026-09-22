@@ -6,7 +6,7 @@ system boundaries rather than claims about model quality.
 ## 1. No Local Evidence
 
 `test_no_match_retains_missing_evidence_warning` queries a corpus about grounded
-retrieval with an unrelated coral-bleaching question. PaperScout returns no paper,
+retrieval with an unrelated coral-bleaching question. GrantScout returns no paper,
 no claim, and an explicit missing-evidence warning. The system does not synthesize
 an unsupported answer.
 

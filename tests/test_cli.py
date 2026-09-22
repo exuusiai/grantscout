@@ -2,7 +2,7 @@ import json
 
 from typer.testing import CliRunner
 
-from paperscout.cli import app
+from grantscout.cli import app
 
 
 def test_ask_dry_run_returns_structured_json() -> None:

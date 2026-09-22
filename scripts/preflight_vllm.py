@@ -2,7 +2,7 @@
 """Validate a local Qwen/vLLM deployment before starting the model server.
 
 This script deliberately accepts only a loopback endpoint for the optional
-post-start probe. PaperScout's model client has the same restriction, so a
+post-start probe. GrantScout's model client has the same restriction, so a
 third-party OpenAI-compatible gateway cannot accidentally enter this workflow.
 """
 
@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import importlib.metadata
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -125,12 +126,31 @@ def inspect_runtime() -> tuple[dict[str, Any], list[str]]:
         "compute_capability": target_arch,
         "torch_arches": supported_arches,
     }
-    if supported_arches and target_arch not in supported_arches:
+    if supported_arches and not arch_compatible(capability, supported_arches):
         errors.append(
-            f"Installed PyTorch does not include kernels for {target_arch} ({device_name}). "
+            f"Installed PyTorch does not include kernels compatible with {target_arch} ({device_name}). "
             "Install a PyTorch build compatible with this GPU before starting vLLM."
         )
     return details, errors
+
+
+def arch_compatible(capability: tuple[int, int], supported_arches: list[str]) -> bool:
+    """Same-major lower-minor kernels run on the GPU (CUDA binary compatibility).
+
+    e.g. sm_80/sm_86 kernels run on an sm_89 GPU (L20); requiring the exact
+    sm_89 string in torch's arch list produced false negatives on common GPUs.
+    """
+    gpu_major, gpu_minor = capability
+    for arch in supported_arches:
+        match = re.fullmatch(r"sm_(\d+)(a)?", arch)
+        if not match:
+            continue
+        digits = match.group(1)
+        major = int(digits) // 10
+        minor = int(digits) % 10
+        if major == gpu_major and minor <= gpu_minor:
+            return True
+    return False
 
 
 def inspect_endpoint(

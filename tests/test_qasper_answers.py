@@ -1,16 +1,16 @@
 import json
 from pathlib import Path
 
-from paperscout.config import Settings
-from paperscout.evaluation.datasets import ingest_jsonl
-from paperscout.evaluation.qasper import (
+from grantscout.config import Settings
+from grantscout.evaluation.datasets import ingest_jsonl
+from grantscout.evaluation.qasper import (
     expected_answer_type,
     persist_qasper_evaluation,
     run_qasper_answer_evaluation,
     score_qasper_prediction,
 )
-from paperscout.models.llm import ChatResponse
-from paperscout.retrieval.store import CorpusStore
+from grantscout.models.llm import ChatResponse
+from grantscout.retrieval.store import CorpusStore
 
 
 class FakeAnswerClient:

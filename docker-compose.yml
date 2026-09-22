@@ -1,0 +1,20 @@
+# GrantScout 单机部署:服务 + 数据卷。模型服务(vLLM)通常另起在宿主机,
+# 用 GRANTSCOUT_MODEL_BASE_URL 指向(如 http://host.docker.internal:8001/v1)。
+services:
+  grantscout:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      GRANTSCOUT_DATA_DIR: /app/data
+      GRANTSCOUT_RUNS_DIR: /app/runs
+      GRANTSCOUT_MODEL_BASE_URL: ${GRANTSCOUT_MODEL_BASE_URL:-http://host.docker.internal:8001/v1}
+      GRANTSCOUT_MODEL_NAME: ${GRANTSCOUT_MODEL_NAME:-Qwen/Qwen3-8B}
+      GRANTSCOUT_USE_MODEL_REASONING: ${GRANTSCOUT_USE_MODEL_REASONING:-false}
+      GRANTSCOUT_METRICS_ENABLED: ${GRANTSCOUT_METRICS_ENABLED:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data
+      - ./runs:/app/runs
+    restart: unless-stopped

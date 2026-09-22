@@ -1,6 +1,6 @@
 # Product roadmap
 
-PaperScout is moving from a one-shot paper summarizer to a persistent research workspace.
+GrantScout is moving from a one-shot paper summarizer to a persistent research workspace.
 
 ## Implemented foundation
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build PaperScout evaluation JSONL from a local SciFact claims split."""
+"""Build GrantScout evaluation JSONL from a local SciFact claims split."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from paperscout.retrieval.store import CorpusStore
+from grantscout.retrieval.store import CorpusStore
 
 
 def _terms(text: str) -> set[str]:

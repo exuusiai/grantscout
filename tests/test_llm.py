@@ -1,4 +1,4 @@
-from paperscout.models.llm import OpenAICompatibleClient, parse_json_content
+from grantscout.models.llm import OpenAICompatibleClient, parse_json_content
 
 
 def test_parse_json_content_ignores_thinking_and_code_fences() -> None:

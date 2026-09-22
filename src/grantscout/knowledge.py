@@ -1,0 +1,298 @@
+from __future__ import annotations
+
+import hashlib
+import re
+import shutil
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
+from pathlib import Path
+from threading import Lock
+from typing import Callable
+from uuid import uuid4
+
+from grantscout.models.schemas import Paper, ParsedPaper
+from grantscout.retrieval.parser import parse_document
+from grantscout.retrieval.store import CorpusStore
+
+Parser = Callable[[Path, str], ParsedPaper]
+PARSERS: dict[str, Parser] = {}
+
+
+def register_parser(suffix: str, parser: Parser) -> None:
+    PARSERS[suffix.lower().lstrip(".")] = parser
+
+
+class KnowledgeService:
+    def __init__(self, root: Path, workers: int = 2) -> None:
+        self.root = root
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.db_path = root / "knowledge.sqlite"
+        self.pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="ingest")
+        self.lock = Lock()
+        with self._db() as db:
+            db.executescript("""
+            PRAGMA foreign_keys=ON;
+            CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY,name TEXT NOT NULL,created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS documents(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,name TEXT NOT NULL,status TEXT NOT NULL,progress INTEGER NOT NULL,error TEXT,path TEXT,sha256 TEXT,created_at TEXT NOT NULL,FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE);
+            CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,title TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE);
+            CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT,conversation_id TEXT NOT NULL,role TEXT NOT NULL,content TEXT NOT NULL,created_at TEXT NOT NULL,FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE);
+            """)
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(documents)")}
+            if "scope" not in columns:
+                db.execute("ALTER TABLE documents ADD COLUMN scope TEXT NOT NULL DEFAULT 'public'")
+            db.executescript("""
+            CREATE TABLE IF NOT EXISTS project_memory(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(project_id, content),
+                FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+            );
+            """)
+        self._recover_interrupted()
+
+    def _db(self):
+        db = sqlite3.connect(self.db_path)
+        db.row_factory = sqlite3.Row
+        return db
+
+    def create_project(self, name: str) -> dict:
+        project_id = re.sub(r"[^a-zA-Z0-9_-]+", "-", name).strip("-").lower() or uuid4().hex[:12]
+        with self._db() as db:
+            db.execute("INSERT OR IGNORE INTO projects VALUES(?,?,?)", (project_id, name, _now()))
+        return {"id": project_id, "name": name}
+
+    def projects(self) -> list[dict]:
+        with self._db() as db:
+            return [dict(row) for row in db.execute("SELECT * FROM projects ORDER BY created_at DESC")]
+
+    def delete_project(self, project_id: str) -> None:
+        self._require(project_id)
+        with self.lock, self._db() as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            db.execute("DELETE FROM projects WHERE id=?", (project_id,))
+        directory = self.root / "projects" / project_id
+        if directory.exists():
+            shutil.rmtree(directory)
+
+    def _recover_interrupted(self) -> None:
+        """Re-enqueue documents stuck mid-ingest by a previous process; drop missing sources."""
+        with self._db() as db:
+            rows = db.execute(
+                "SELECT id,project_id,path,scope FROM documents WHERE status IN ('queued','parsing','indexing')"
+            ).fetchall()
+        for row in rows:
+            path = Path(row["path"]) if row["path"] else None
+            if path and path.is_file():
+                self.pool.submit(self._ingest, row["id"], row["project_id"], path, row["scope"] or "public")
+            else:
+                self._update(row["id"], "failed", 100, "service restarted before ingest; source file missing")
+
+    def enqueue(self, project_id: str, name: str, payload: bytes, scope: str = "public") -> dict:
+        self._require(project_id)
+        if scope not in {"public", "private"}:
+            raise ValueError(f"Invalid scope: {scope}")
+        suffix = Path(name).suffix.lower()
+        if suffix not in {".md", ".markdown", ".pdf", ".pptx", ".txt"} and suffix[1:] not in PARSERS:
+            raise ValueError(f"Unsupported format: {suffix}")
+        document_id = uuid4().hex
+        directory = self.root / "projects" / project_id / "uploads"
+        directory.mkdir(parents=True, exist_ok=True)
+        safe_name = re.sub(r"[^a-zA-Z0-9._-]+", "-", Path(name).name)
+        path = directory / f"{document_id}-{safe_name}"
+        path.write_bytes(payload)
+        with self._db() as db:
+            db.execute(
+                "INSERT INTO documents(id,project_id,name,status,progress,error,path,sha256,created_at,scope)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (document_id, project_id, name, "queued", 0, None, str(path), hashlib.sha256(payload).hexdigest(), _now(), scope),
+            )
+        self.pool.submit(self._ingest, document_id, project_id, path, scope)
+        return self.document(document_id)
+
+    def _ingest(self, document_id: str, project_id: str, path: Path, scope: str = "public") -> None:
+        self._update(document_id, "parsing", 25)
+        try:
+            parser = PARSERS.get(path.suffix.lower().lstrip("."))
+            parsed = parser(path, document_id) if parser else parse_document(path, paper_id=document_id)
+            self.document(document_id)
+            self._update(document_id, "indexing", 70)
+            if scope == "private":
+                parsed = self._scrub_private(parsed)
+            with self.lock, CorpusStore(self.corpus_path(project_id)) as store:
+                store.upsert(parsed)
+                store.set_paper_meta(document_id, scope=scope)
+            self._update(document_id, "ready", 100)
+        except Exception as error:
+            self._update(document_id, "failed", 100, str(error)[:1000])
+
+    @staticmethod
+    def _scrub_private(parsed: ParsedPaper) -> ParsedPaper:
+        from grantscout.config import get_settings
+        from grantscout.privacy.pii import scrub_parsed_paper
+
+        settings = get_settings()
+        if not settings.pii_scrub_private:
+            return parsed
+        extra = [word.strip() for word in settings.pii_extra_words.split(",") if word.strip()]
+        return scrub_parsed_paper(parsed, extra_words=extra, use_presidio=settings.pii_presidio)
+
+    def _update(self, document_id: str, status: str, progress: int, error: str | None = None) -> None:
+        with self._db() as db:
+            db.execute("UPDATE documents SET status=?,progress=?,error=? WHERE id=?", (status, progress, error, document_id))
+
+    def document(self, document_id: str) -> dict:
+        with self._db() as db:
+            row = db.execute("SELECT * FROM documents WHERE id=?", (document_id,)).fetchone()
+        if not row:
+            raise KeyError(document_id)
+        return dict(row)
+
+    def documents(self, project_id: str) -> list[dict]:
+        self._require(project_id)
+        with self._db() as db:
+            return [dict(row) for row in db.execute("SELECT * FROM documents WHERE project_id=? ORDER BY created_at DESC", (project_id,))]
+
+    def delete_document(self, document_id: str) -> None:
+        document = self.document(document_id)
+        path = Path(document["path"]) if document.get("path") else None
+        corpus = self.corpus_path(document["project_id"])
+        with self.lock:
+            if corpus.exists():
+                with CorpusStore(corpus) as store:
+                    store.delete(document_id)
+            with self._db() as db:
+                db.execute("DELETE FROM documents WHERE id=?", (document_id,))
+            if path and path.exists() and self.root in path.parents:
+                path.unlink()
+
+    def save_report(self, project_id: str, title: str, markdown: str) -> dict:
+        self._require(project_id)
+        name = f"{title.strip()[:80] or 'Research report'}.md"
+        return self.enqueue(project_id, name, markdown.encode("utf-8"))
+
+    def collect_paper(self, project_id: str, paper: Paper) -> dict:
+        authors = ", ".join(paper.authors) or "Unknown"
+        markdown = (
+            f"# {paper.title}\n\n- Authors: {authors}\n- Year: {paper.year or 'Unknown'}\n"
+            f"- Source: {paper.source_path or 'Unknown'}\n\n## Abstract\n\n{paper.abstract}\n"
+        )
+        return self.enqueue(project_id, f"{paper.title[:80]}.md", markdown.encode("utf-8"))
+
+    def create_conversation(self, project_id: str, title: str = "New conversation") -> dict:
+        self._require(project_id)
+        conversation_id = uuid4().hex
+        now = _now()
+        with self._db() as db:
+            db.execute(
+                "INSERT INTO conversations VALUES(?,?,?,?,?)",
+                (conversation_id, project_id, title.strip()[:120] or "New conversation", now, now),
+            )
+        return self.conversation(conversation_id)
+
+    def conversations(self, project_id: str) -> list[dict]:
+        self._require(project_id)
+        with self._db() as db:
+            return [dict(row) for row in db.execute(
+                "SELECT * FROM conversations WHERE project_id=? ORDER BY updated_at DESC", (project_id,)
+            )]
+
+    def conversation(self, conversation_id: str) -> dict:
+        with self._db() as db:
+            row = db.execute("SELECT * FROM conversations WHERE id=?", (conversation_id,)).fetchone()
+            if not row:
+                raise KeyError(conversation_id)
+            messages = [dict(item) for item in db.execute(
+                "SELECT role,content,created_at FROM messages WHERE conversation_id=? ORDER BY id", (conversation_id,)
+            )]
+        return {**dict(row), "messages": messages}
+
+    def save_messages(self, conversation_id: str, messages: list[dict[str, str]]) -> dict:
+        conversation = self.conversation(conversation_id)
+        now = _now()
+        with self._db() as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            db.execute("DELETE FROM messages WHERE conversation_id=?", (conversation_id,))
+            db.executemany(
+                "INSERT INTO messages(conversation_id,role,content,created_at) VALUES(?,?,?,?)",
+                [(conversation_id, item["role"], item["content"], now) for item in messages],
+            )
+            title = next((item["content"][:80] for item in messages if item["role"] == "user"), conversation["title"])
+            db.execute("UPDATE conversations SET title=?,updated_at=? WHERE id=?", (title, now, conversation_id))
+        return self.conversation(conversation_id)
+
+    def delete_conversation(self, conversation_id: str) -> None:
+        self.conversation(conversation_id)
+        with self._db() as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            db.execute("DELETE FROM conversations WHERE id=?", (conversation_id,))
+
+    def add_memory(self, project_id: str, content: str) -> dict | None:
+        """Persist one durable project fact; deduplicated, capped at 100 entries."""
+        self._require(project_id)
+        content = content.strip()[:500]
+        if not content:
+            return None
+        with self._db() as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            db.execute(
+                "INSERT OR IGNORE INTO project_memory(project_id,content,created_at) VALUES(?,?,?)",
+                (project_id, content, _now()),
+            )
+            db.execute(
+                "DELETE FROM project_memory WHERE project_id=? AND id NOT IN "
+                "(SELECT id FROM project_memory WHERE project_id=? ORDER BY id DESC LIMIT 100)",
+                (project_id, project_id),
+            )
+        return self.memory_entry(project_id, content)
+
+    def memory_entry(self, project_id: str, content: str) -> dict | None:
+        with self._db() as db:
+            row = db.execute(
+                "SELECT id,content,created_at FROM project_memory WHERE project_id=? AND content=?",
+                (project_id, content),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_memory(self, project_id: str) -> list[dict]:
+        self._require(project_id)
+        with self._db() as db:
+            return [
+                dict(row)
+                for row in db.execute(
+                    "SELECT id,content,created_at FROM project_memory WHERE project_id=? ORDER BY id",
+                    (project_id,),
+                )
+            ]
+
+    def delete_memory(self, project_id: str, memory_id: int) -> None:
+        self._require(project_id)
+        with self._db() as db:
+            cursor = db.execute(
+                "DELETE FROM project_memory WHERE id=? AND project_id=?", (memory_id, project_id)
+            )
+            if cursor.rowcount == 0:
+                raise KeyError(memory_id)
+
+    def corpus_path(self, project_id: str) -> Path:
+        self._require(project_id)
+        return self.root / "projects" / project_id / "corpus.sqlite"
+
+    def export(self, project_id: str) -> dict:
+        self._require(project_id)
+        path = self.corpus_path(project_id)
+        if not path.exists():
+            return {"project_id": project_id, "papers": []}
+        with CorpusStore(path) as store:
+            return {"project_id": project_id, "papers": [paper.model_dump(mode="json") for paper in store.list_papers()]}
+
+    def _require(self, project_id: str) -> None:
+        with self._db() as db:
+            if not db.execute("SELECT 1 FROM projects WHERE id=?", (project_id,)).fetchone():
+                raise KeyError(project_id)
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat()

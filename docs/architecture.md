@@ -1,6 +1,6 @@
-# PaperScout Architecture
+# GrantScout Architecture
 
-PaperScout keeps the research workflow explicit and inspectable:
+GrantScout keeps the research workflow explicit and inspectable:
 
 ```text
 Question
@@ -25,7 +25,7 @@ Question
   FAISS, with a NumPy fallback when FAISS is unavailable.
 - Project knowledge bases contain only user-uploaded/collected documents and generated
   reports. External arXiv/OpenAlex searches use query-scoped caches of public metadata
-  and abstracts; PaperScout does not download remote PDFs into project storage.
+  and abstracts; GrantScout does not download remote PDFs into project storage.
 - Uploads run through an in-process worker pool. A successful task progresses through
   parsing and indexing to `ready`, after which it is immediately searchable through
   the project's SQLite FTS corpus. Uploading does not change the active search source;
@@ -36,7 +36,7 @@ Question
 - The conversation model resolves ambiguity and extracts research constraints.
 - An optional, separately configured OpenAI-compatible research model performs
   structured fact extraction and evidence-bounded synthesis.
-- Both integrations use `/chat/completions`; PaperScout does not use `/responses`.
+- Both integrations use `/chat/completions`; GrantScout does not use `/responses`.
 - Reports are rendered deterministically from the final research state. Chinese is the
   default locale, and the UI keeps separate Chinese and English report fragments.
 
@@ -54,5 +54,5 @@ benchmarks, and environments without a model server. An OpenAI-compatible server
 can be configured through `.env`; vLLM startup is provided in `scripts/start_vllm.sh`.
 
 The semantic index is intentionally separate from the SQLite corpus. Rebuilding
-the corpus never silently changes a vector index; run `paperscout index` after
+the corpus never silently changes a vector index; run `grantscout index` after
 ingesting new papers.

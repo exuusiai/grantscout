@@ -3,7 +3,7 @@ import argparse
 import json
 from pathlib import Path
 
-from paperscout.retrieval.store import CorpusStore
+from grantscout.retrieval.store import CorpusStore
 
 
 def main() -> None:

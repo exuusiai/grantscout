@@ -1,6 +1,6 @@
-# PaperScout
+# GrantScout
 
-PaperScout 是一个面向 AI 研究与技术调研的开源论文研究 Agent。它不仅搜索和总结论文，还会围绕研究任务、数据集、指标、模型规模、训练预算与实验条件判断论文是否真正可比，并将结论、原始证据和引用关系保存在可追溯的研究状态中。
+GrantScout（原 PaperScout）是一个面向 AI 研究与技术调研的开源论文研究 Agent，并已扩展为**立项本子撰写平台**：它不仅搜索和总结论文，还会围绕研究任务、数据集、指标、模型规模、训练预算与实验条件判断论文是否真正可比，并将结论、原始证据和引用关系保存在可追溯的研究状态中。
 
 项目的目标不是替代论文阅读，而是减少检索、筛选、条件核对和研究决策中的重复工作，尤其避免把“实验条件不同”误判为“论文结论冲突”。
 
@@ -38,16 +38,16 @@ PaperScout 是一个面向 AI 研究与技术调研的开源论文研究 Agent�
 
 ## 快速开始
 
-环境要求：Python 3.11+。
+环境要求：Python 3.12+。
 
 ```bash
-git clone https://github.com/exuusiai/paperscout.git
-cd paperscout
+git clone https://github.com/exuusiai/grantscout.git
+cd grantscout
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev]'
 cp .env.example .env
-paperscout serve --host 127.0.0.1 --port 8000
+grantscout serve --host 127.0.0.1 --port 8000
 ```
 
 打开 `http://127.0.0.1:8000/` 即可使用 Web 界面。
@@ -59,10 +59,10 @@ Web 端默认使用中文和 arXiv。创建项目后，可以批量上传 MD、P
 命令行示例：
 
 ```bash
-paperscout health
-paperscout ingest papers/example.pdf --corpus data/corpus.sqlite
-paperscout search "retrieval hallucination" --corpus data/corpus.sqlite
-paperscout ask "哪些方法可以降低 RAG 幻觉？" --corpus data/corpus.sqlite
+grantscout health
+grantscout ingest papers/example.pdf --corpus data/corpus.sqlite
+grantscout search "retrieval hallucination" --corpus data/corpus.sqlite
+grantscout ask "哪些方法可以降低 RAG 幻觉？" --corpus data/corpus.sqlite
 ```
 
 ## 模型配置
@@ -70,18 +70,18 @@ paperscout ask "哪些方法可以降低 RAG 幻觉？" --corpus data/corpus.sql
 默认模型使用本机 OpenAI-compatible Chat Completions 接口：
 
 ```bash
-PAPERSCOUT_MODEL_BASE_URL=http://127.0.0.1:8001/v1
-PAPERSCOUT_MODEL_NAME=Qwen/Qwen3-8B
-PAPERSCOUT_MODEL_API_KEY=EMPTY
-PAPERSCOUT_USE_MODEL_REASONING=true
+GRANTSCOUT_MODEL_BASE_URL=http://127.0.0.1:8001/v1
+GRANTSCOUT_MODEL_NAME=Qwen/Qwen3-8B
+GRANTSCOUT_MODEL_API_KEY=EMPTY
+GRANTSCOUT_USE_MODEL_REASONING=true
 ```
 
 可以为论文分析单独配置研究模型：
 
 ```bash
-PAPERSCOUT_RESEARCH_MODEL_BASE_URL=https://example.com/v1
-PAPERSCOUT_RESEARCH_MODEL_NAME=your-research-model
-PAPERSCOUT_RESEARCH_MODEL_API_KEY=your-api-key
+GRANTSCOUT_RESEARCH_MODEL_BASE_URL=https://example.com/v1
+GRANTSCOUT_RESEARCH_MODEL_NAME=your-research-model
+GRANTSCOUT_RESEARCH_MODEL_API_KEY=your-api-key
 ```
 
 内置模型端点严格限制为 loopback 地址。独立研究模型必须显式配置为以 `/v1` 结尾的 HTTPS OpenAI-compatible 接口，调用路径为 `/chat/completions`；项目不使用 `/v1/responses`。不要把 API Key 写入代码、提交到 Git 或输出到日志。
@@ -92,8 +92,8 @@ PAPERSCOUT_RESEARCH_MODEL_API_KEY=your-api-key
 
 ```bash
 python -m pip install -e '.[retrieval]'
-paperscout index --corpus data/corpus.sqlite
-PAPERSCOUT_RETRIEVAL_MODE=semantic paperscout ask "..." --corpus data/corpus.sqlite
+grantscout index --corpus data/corpus.sqlite
+GRANTSCOUT_RETRIEVAL_MODE=semantic grantscout ask "..." --corpus data/corpus.sqlite
 ```
 
 下载并导入 SciFact、Qasper 数据：
@@ -101,7 +101,7 @@ PAPERSCOUT_RETRIEVAL_MODE=semantic paperscout ask "..." --corpus data/corpus.sql
 ```bash
 python scripts/download_datasets.py --dataset scifact --split all
 python scripts/download_datasets.py --dataset qasper --split train
-paperscout ingest-jsonl data/raw/scifact/corpus.jsonl --corpus data/scifact.sqlite
+grantscout ingest-jsonl data/raw/scifact/corpus.jsonl --corpus data/scifact.sqlite
 ```
 
 ## 评测
@@ -109,9 +109,9 @@ paperscout ingest-jsonl data/raw/scifact/corpus.jsonl --corpus data/scifact.sqli
 项目支持 Recall@K、Evidence Recall@K、MRR、消融实验，以及 Qasper 回答 F1、答案类型、证据 F1、延迟和 Token 用量评测。
 
 ```bash
-paperscout evaluate evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
-paperscout benchmark evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
-paperscout ablate evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
+grantscout evaluate evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
+grantscout benchmark evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
+grantscout ablate evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
 python -m pytest -q
 ```
 
@@ -143,6 +143,14 @@ python -m pytest -q
 
 ## 开源定位
 
-PaperScout 适合作为 Agentic RAG、科研智能体、证据检索和可信生成方向的实验平台。项目强调可验证的工程闭环：检索结果可追踪、模型输出有证据、论文比较有条件门禁、失败和未知状态显式呈现。
+GrantScout 适合作为 Agentic RAG、科研智能体、证据检索和可信生成方向的实验平台。项目强调可验证的工程闭环：检索结果可追踪、模型输出有证据、论文比较有条件门禁、失败和未知状态显式呈现。
 
 欢迎通过 Issue 提交检索失败案例、可比性误判、公开评测数据和功能建议。
+
+## 部署与扩展
+
+- **Docker**:`docker compose up --build`(数据卷挂载 `data/` 与 `runs/`;模型服务 vLLM 通常另起,用 `GRANTSCOUT_MODEL_BASE_URL` 指向)
+- **Kubernetes**:`deploy/k8s/grantscout.yaml`(Deployment + PVC + Service)
+- **指标**:设 `GRANTSCOUT_METRICS_ENABLED=true` 后暴露 `/metrics`(Prometheus 格式)
+- **VSCode 扩展**:`extensions/vscode-grantscout/`(行内补全,`code --extensionDevelopmentPath` 安装)
+- **Web 工作台**:`/proposals`(本子工作台 + 知识库上传)、`/playground`(补全试验场)、`/docs`(API 文档)

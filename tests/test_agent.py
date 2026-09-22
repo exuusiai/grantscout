@@ -1,12 +1,12 @@
 from pathlib import Path
 
-from paperscout.agent.loop import PaperScoutAgent
-from paperscout.agent.planner import decompose_question
-from paperscout.config import Settings
-from paperscout.models.schemas import EvidenceItem
-from paperscout.retrieval.parser import parse_document
-from paperscout.retrieval.store import CorpusStore
-from paperscout.tools.evidence import extract_structured_facts, synthesize_claims
+from grantscout.agent.loop import GrantScoutAgent
+from grantscout.agent.planner import decompose_question
+from grantscout.config import Settings
+from grantscout.models.schemas import EvidenceItem
+from grantscout.retrieval.parser import parse_document
+from grantscout.retrieval.store import CorpusStore
+from grantscout.tools.evidence import extract_structured_facts, synthesize_claims
 
 
 class FakeJsonModel:
@@ -108,7 +108,7 @@ def test_agent_generates_traceable_report(tmp_path: Path) -> None:
     document = parse_document(source, paper_id="traceable-paper")
     with CorpusStore(tmp_path / "corpus.sqlite") as store:
         store.upsert(document)
-        state = PaperScoutAgent(store, settings).run("Which retrieval method improves evidence recall?")
+        state = GrantScoutAgent(store, settings).run("Which retrieval method improves evidence recall?")
 
     assert state.status == "completed"
     assert state.selected_papers
