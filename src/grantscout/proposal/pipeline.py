@@ -34,6 +34,9 @@ from grantscout.proposal.schemas import (
     SectionDraft,
 )
 from grantscout.proposal.templates import get_template
+from grantscout.retrieval.query_interpreter import interpret_query
+from grantscout.retrieval.reranker import CrossEncoderReranker, RerankerError
+from grantscout.retrieval.semantic import SemanticIndex, SemanticIndexError
 from grantscout.retrieval.store import CorpusStore
 
 logger = logging.getLogger(__name__)
@@ -81,6 +84,36 @@ class ProposalPipeline:
         self.output_language = output_language
         self.on_tool_call = on_tool_call
         self.model_client = _build_model_client(settings)
+        self._semantic_index: SemanticIndex | None = None
+        self._reranker_instance: CrossEncoderReranker | None = None
+        # Evidence retrieved outside the dossier stage (per-section sourcing);
+        # citations may legitimately trace to either pool.
+        self._run_evidence_ids: set[str] = set()
+
+    def _section_retrieval(self) -> tuple[SemanticIndex | None, CrossEncoderReranker | None]:
+        """Resolve the configured retrieval stack once, degrading like the agent loop."""
+        if self._semantic_index is None and self.settings.retrieval_mode == "semantic":
+            try:
+                self._semantic_index = SemanticIndex(
+                    self.settings.vector_index_path,
+                    self.settings.embedding_model,
+                    device=self.settings.embedding_device or "auto",
+                )
+                self._semantic_index.load()
+            except SemanticIndexError as error:
+                logger.warning("semantic index unavailable for section drafting: %s", error)
+                self._semantic_index = None
+        if self._reranker_instance is None and self.settings.use_reranker:
+            reranker = CrossEncoderReranker(
+                self.settings.reranker_model, device=self.settings.reranker_device or "auto"
+            )
+            try:
+                reranker._load_model()
+            except RerankerError as error:
+                logger.warning("reranker unavailable for section drafting: %s", error)
+            else:
+                self._reranker_instance = reranker
+        return self._semantic_index, self._reranker_instance
 
     def run(self, request: ProposalRequest) -> ProposalDocument:
         if request.template_id != self.template.id:
@@ -517,10 +550,23 @@ class ProposalPipeline:
 
     def _section_sources(self, document: ProposalDocument, section_key: str) -> list[EvidenceItem]:
         spec = next(item for item in self.template.sections if item.key == section_key)
-        query = f"{document.idea_brief.topic} {spec.title}"
+        raw_query = f"{document.idea_brief.topic} {spec.title}"
+        # 中文选题在 unicode61 词法索引下基本零命中;模型可用时统一走查询解释。
+        # 模型关闭时保持原查询,避免测试与离线环境发起网络调用。
+        query = raw_query
+        if self.model_client is not None:
+            query, _ranking = interpret_query(raw_query, self.settings)
+        semantic_index, reranker = self._section_retrieval()
+        evidence_results = (
+            semantic_index.search(query, top_k=12)
+            if semantic_index is not None
+            else self.store.search(query, top_k=12)
+        )
+        if reranker is not None and evidence_results:
+            evidence_results = reranker.rerank(query, evidence_results, top_k=12)
         seen: set[str] = set()
         sources: list[EvidenceItem] = []
-        for result in self.store.search(query, top_k=12):
+        for result in evidence_results:
             if result.evidence.id in seen:
                 continue
             seen.add(result.evidence.id)
@@ -531,8 +577,9 @@ class ProposalPipeline:
             # CJK 词法检索在 unicode61 分词下偏弱;trigram 句子索引按子串兜底。
             from grantscout.retrieval.sentences import SentenceIndex
 
-            for hit in SentenceIndex(self.store).continue_fragment(query, top_k=8):
+            for hit in SentenceIndex(self.store).continue_fragment(raw_query, top_k=8):
                 sources.append(hit.evidence)
+        self._run_evidence_ids.update(item.id for item in sources)
         return sources
 
     def _draft_with_model(
@@ -740,9 +787,9 @@ class ProposalPipeline:
     def _self_check(self, document: ProposalDocument) -> ProposalReview:
         def operation() -> dict:
             review = ProposalReview()
-            evidence_ids: set[str] = set()
+            evidence_ids: set[str] = set(self._run_evidence_ids)
             if document.dossier is not None:
-                evidence_ids = {item.id for item in document.dossier.state.evidence_items}
+                evidence_ids |= {item.id for item in document.dossier.state.evidence_items}
             for spec in self.template.sections:
                 draft = document.latest_draft(spec.key)
                 if draft is None:
