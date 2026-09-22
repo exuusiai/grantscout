@@ -115,9 +115,9 @@ grantscout ablate evals/custom_topics/queries.jsonl --corpus data/corpus.sqlite
 python -m pytest -q
 ```
 
-当前 Qasper 检索实验中，`top-k=10` 的证据召回率为 `0.6653`，`top-k=5` 为 `0.4849`。跨论文冲突评测与 SciFact 的 claim-evidence 标签严格分离；现有模型试标数据只能用于误报诊断，不能作为正式人工 ground truth 或冲突召回率依据。
+2026-09-22 的同库受控 A/B 对照（同一语料、同一查询集，BGE-M3 语义检索 vs SQLite FTS5 词法）：SciFact dev（300 查询）证据召回@10 从 `0.8607` 提升到 `0.9002`，MRR 从 `0.6091` 到 `0.6252`；Qasper dev（1005 查询）证据召回@10 从 `0.1701` 提升到 `0.2286`，MRR 略降（`0.3474` → `0.3269`）。跨论文冲突评测与 SciFact 的 claim-evidence 标签严格分离；现有模型试标数据只能用于误报诊断，不能作为正式人工 ground truth 或冲突召回率依据。
 
-2026-09-14 的 Web、报告和知识库定向回归测试为 `19 passed`。AutoDL
+2026-09-22 全量回归测试 `101 passed`（2026-09-14 的 Web、报告和知识库定向回归为 `19 passed`）。AutoDL
 实测项目库中，已解析的 PPTX 可通过 SQLite FTS 检索。该结果验证的是上传、
 解析、热入库和查询链路，不代表 PDF 全文结构恢复或跨论文冲突指标已经达到
 生产标准。
