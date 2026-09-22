@@ -16,13 +16,23 @@ PII_TEXT = (
 
 
 def test_pii_rule_engine() -> None:
-    scrubbed = scrub_text(PII_TEXT, extra_words=["星地链路仿真"])
+    scrubbed = scrub_text(PII_TEXT, extra_words=["星地链路仿真"], use_presidio=False)
     assert "13812345678" not in scrubbed and "<PHONE>" in scrubbed
     assert "11010119900307889X" not in scrubbed and "<ID_CARD>" in scrubbed
     assert "zhangsan@lab.edu.cn" not in scrubbed and "<EMAIL>" in scrubbed
     assert "星地链路仿真" not in scrubbed and "<CUSTOM>" in scrubbed
-    assert "张三" in scrubbed  # NER 层才处理人名,规则层保留
+    assert "张三" in scrubbed  # 规则层保留人名,NER 层负责
     assert "本实验室专注" in scrubbed  # 非敏感文本保留
+
+
+def test_pii_ner_layer_when_available() -> None:
+    from grantscout.privacy.pii import _presidio_analyzer
+
+    if _presidio_analyzer() is None:
+        pytest.skip("presidio/spacy zh model not installed")
+    scrubbed = scrub_text("项目负责人张三在上海交大实验室工作。", use_presidio=True)
+    assert "张三" not in scrubbed
+    assert "<PERSON>" in scrubbed or "<ORGANIZATION>" in scrubbed
 
 
 def test_pii_scrub_parsed_paper() -> None:

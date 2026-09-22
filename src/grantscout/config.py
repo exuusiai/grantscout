@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     pii_scrub_private: bool = True
     pii_presidio: bool = True
     pii_extra_words: str = ""
+    pii_extra_words: str = ""
+    # /web 学术搜索:OpenAlex 检索 + 可选外部模型综合(仅公开元数据外发)。
+    web_api_base_url: str = ""
+    web_api_key: str = ""
+    web_api_model: str = ""
     # Prometheus 指标(/metrics),默认关闭。
     metrics_enabled: bool = False
 

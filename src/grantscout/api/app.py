@@ -674,6 +674,19 @@ def get_evidence(evidence_id: str, corpus: str | None = None) -> dict:
 
 
 
+class WebSearchRequest(BaseModel):
+    query: str = Field(min_length=2, max_length=300)
+    max_results: int = Field(default=5, ge=1, le=10)
+
+
+@app.post("/api/web/search")
+def web_search(request: WebSearchRequest) -> dict:
+    """/web 学术搜索:OpenAlex 确定性检索 + 可选外部模型综合(仅公开元数据外发)。"""
+    from grantscout.tools.websearch import web_answer
+
+    return web_answer(request.query, get_settings(), request.max_results)
+
+
 class ArxivCiteRequest(BaseModel):
     query: str = Field(min_length=2, max_length=300)
     max_results: int = Field(default=5, ge=1, le=20)

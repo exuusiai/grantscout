@@ -29,6 +29,7 @@ button.secondary{background:#fff;color:#0f766e}
   <button class="secondary" data-cmd="summarize">/summarize 选中或全文</button>
   <button class="secondary" data-cmd="refine">/refine 润色选中或全文</button>
   <button class="secondary" data-cmd="find">/find 选中或全文</button>
+  <button class="secondary" data-cmd="web">/web 学术搜索</button>
   <span>语料:<input id="corpus" value="data/corpus.sqlite" style="width:220px;padding:4px 8px;border:1px solid #94a3b8;border-radius:4px"></span>
   <span id="status">就绪</span>
 </div>
@@ -78,8 +79,24 @@ editor.addEventListener('keydown',e=>{
   if(e.key==='Escape'){$('#candidates').innerHTML='';candidates=[]}});
 editor.addEventListener('input',()=>{const pos=cursorPos();const ch=editor.value[pos-1]||'';
   schedule('。!?;;..'.includes(ch)||ch==='\n')});
+async function webSearch(sel){status('/web 检索中…');reqId+=1;
+  try{const d=await jfetch('/api/web/search',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({query:sel||'人工智能 最新研究',max_results:5})});
+    const box=$('#candidates');box.innerHTML='';
+    const esc=s=>String(s??'').replace(/[&<>]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
+    if(d.answer){const div=document.createElement('div');div.className='card command';
+      div.innerHTML=`<div class="kind"><span>/web 综合(OpenAlex + 外部模型)</span></div><div class="text">${esc(d.answer)}</div>`;
+      box.append(div)}
+    for(const s of d.sources){const div=document.createElement('div');div.className='card semantic';
+      div.innerHTML=`<div class="kind"><span>${esc(s.venue)} · ${s.year||''} · 被引 ${s.cited_by_count}</span></div><div class="text">${esc(s.title)}</div>`+
+        (s.url?`<a class="cite" href="${esc(s.url)}" target="_blank">原文链接</a>`:'');
+      box.append(div)}
+    if(d.warnings&&d.warnings.length){const w=document.createElement('div');w.className='hint';w.textContent='⚠ '+d.warnings.join(' ');box.append(w)}
+    status('/web 完成')}
+  catch(e){status('失败:'+e.message)}}
 document.querySelectorAll('[data-cmd]').forEach(btn=>btn.onclick=async()=>{
   const cmd=btn.dataset.cmd;const sel=editor.value.slice(editor.selectionStart,editor.selectionEnd)||editor.value;
+  if(cmd==='web'){await webSearch(sel);return}
   status('/'+cmd+' …');reqId+=1;controller=new AbortController();
   try{const d=await jfetch('/api/completion',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({command:cmd,command_text:sel,corpus:$('#corpus').value,session_id:sessionId,request_id:'r'+reqId})},controller);

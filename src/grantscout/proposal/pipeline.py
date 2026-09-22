@@ -527,6 +527,12 @@ class ProposalPipeline:
             sources.append(result.evidence)
             if len(sources) >= 8:
                 break
+        if not sources:
+            # CJK 词法检索在 unicode61 分词下偏弱;trigram 句子索引按子串兜底。
+            from grantscout.retrieval.sentences import SentenceIndex
+
+            for hit in SentenceIndex(self.store).continue_fragment(query, top_k=8):
+                sources.append(hit.evidence)
         return sources
 
     def _draft_with_model(
