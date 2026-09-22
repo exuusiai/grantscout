@@ -18,10 +18,11 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: pyproject.toml
       - name: Install test dependencies
         run: python -m pip install -e '.[dev]'
       - name: Run tests
         env:
-          PAPERSCOUT_USE_MODEL_REASONING: "false"
-          PAPERSCOUT_RETRIEVAL_MODE: lexical
+          GRANTSCOUT_USE_MODEL_REASONING: "false"
+          GRANTSCOUT_RETRIEVAL_MODE: lexical
         run: python -m pytest -q

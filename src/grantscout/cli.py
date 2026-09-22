@@ -210,9 +210,19 @@ def search_command(
     with CorpusStore(corpus) as store:
         settings = get_settings()
         semantic_index = (
-            SemanticIndex(settings.vector_index_path, settings.embedding_model) if mode == "semantic" else None
+            SemanticIndex(
+                settings.vector_index_path,
+                settings.embedding_model,
+                device=settings.embedding_device or "auto",
+            )
+            if mode == "semantic"
+            else None
         )
-        reranker = CrossEncoderReranker(settings.reranker_model) if rerank else None
+        reranker = (
+            CrossEncoderReranker(settings.reranker_model, device=settings.reranker_device or "auto")
+            if rerank
+            else None
+        )
         try:
             candidates = search_papers(
                 store, query, top_k=top_k, semantic_index=semantic_index, reranker=reranker
@@ -241,7 +251,9 @@ def index(
     model_name = model or settings.embedding_model
     try:
         with CorpusStore(corpus) as store:
-            result = SemanticIndex(index_path, model_name).build(store)
+            result = SemanticIndex(
+                index_path, model_name, device=settings.embedding_device or "auto"
+            ).build(store)
     except SemanticIndexError as error:
         _emit({"status": "error", "error": str(error)})
         raise typer.Exit(code=1) from error

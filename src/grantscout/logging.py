@@ -11,3 +11,7 @@ def configure_logging(level: str = "INFO") -> None:
         stream=sys.stderr,
         force=True,
     )
+    # Third-party HTTP clients log every request at INFO; keep them at WARNING so
+    # JSON-emitting CLI commands stay parseable even when their streams are merged.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)

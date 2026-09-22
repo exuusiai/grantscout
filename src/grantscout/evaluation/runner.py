@@ -22,7 +22,9 @@ def run_evaluation(
         configured = settings or Settings()
         if semantic_index is None:
             semantic_index = SemanticIndex(
-                configured.vector_index_path, configured.embedding_model
+                configured.vector_index_path,
+                configured.embedding_model,
+                device=configured.embedding_device or "auto",
             )
             semantic_index.load()
     with CorpusStore(corpus) as store:

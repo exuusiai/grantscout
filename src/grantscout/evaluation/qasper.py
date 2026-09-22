@@ -199,7 +199,11 @@ def run_qasper_answer_evaluation(
         records = records[:limit]
     semantic_index = None
     if mode == "semantic":
-        semantic_index = SemanticIndex(settings.vector_index_path, settings.embedding_model)
+        semantic_index = SemanticIndex(
+            settings.vector_index_path,
+            settings.embedding_model,
+            device=settings.embedding_device or "auto",
+        )
         semantic_index.load()
     client = model_client or OpenAICompatibleClient(
         settings.model_base_url,

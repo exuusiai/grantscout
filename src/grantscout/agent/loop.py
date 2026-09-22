@@ -59,14 +59,20 @@ class GrantScoutAgent:
         self.reranker = reranker_instance
         self.output_language = output_language
         if settings.retrieval_mode.lower() == "semantic" and self.semantic_index is None:
-            self.semantic_index = SemanticIndex(settings.vector_index_path, settings.embedding_model)
+            self.semantic_index = SemanticIndex(
+                settings.vector_index_path,
+                settings.embedding_model,
+                device=settings.embedding_device or "auto",
+            )
             try:
                 self.semantic_index.load()
             except SemanticIndexError as error:
                 logger.warning("Semantic index unavailable; falling back to lexical retrieval: %s", error)
                 self.semantic_index = None
         if self.rerank_enabled and self.reranker is None:
-            self.reranker = CrossEncoderReranker(settings.reranker_model)
+            self.reranker = CrossEncoderReranker(
+                settings.reranker_model, device=settings.reranker_device or "auto"
+            )
             try:
                 self.reranker._load_model()
             except RerankerError as error:

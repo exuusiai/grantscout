@@ -612,7 +612,11 @@ def inline_completion(request: CompletionRequest) -> dict[str, object]:
     if settings.retrieval_mode.lower() == "semantic":
         from grantscout.retrieval.semantic import SemanticIndex
 
-        semantic_index = SemanticIndex(settings.vector_index_path, settings.embedding_model)
+        semantic_index = SemanticIndex(
+            settings.vector_index_path,
+            settings.embedding_model,
+            device=settings.embedding_device or "auto",
+        )
         try:
             semantic_index.load()
         except Exception:  # noqa: BLE001 - semantic is optional

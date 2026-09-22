@@ -37,7 +37,11 @@ class Settings(BaseSettings):
     retrieval_mode: str = "lexical"
     embedding_model: str = "BAAI/bge-m3"
     vector_index_path: Path = Path("data/vector.index")
+    # Torch device for the local embedding/reranker models (e.g. "cuda:1") so they
+    # can stay off a GPU reserved for another workload such as vLLM.
+    embedding_device: str | None = None
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    reranker_device: str | None = None
     use_reranker: bool = False
     arxiv_api_url: str = "https://export.arxiv.org/api/query"
     arxiv_timeout_seconds: float = Field(default=12.0, gt=0, le=60)

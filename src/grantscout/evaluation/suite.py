@@ -24,7 +24,11 @@ def run_evaluation_suite(
     run_id = started_at.strftime("%Y%m%dT%H%M%SZ") + "-evaluation-" + uuid4().hex[:8]
     semantic_index = None
     if settings.retrieval_mode.lower() == "semantic":
-        semantic_index = SemanticIndex(settings.vector_index_path, settings.embedding_model)
+        semantic_index = SemanticIndex(
+            settings.vector_index_path,
+            settings.embedding_model,
+            device=settings.embedding_device or "auto",
+        )
         semantic_index.load()
     payload: dict[str, Any] = {
         "run_id": run_id,
