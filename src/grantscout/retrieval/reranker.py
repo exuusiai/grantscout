@@ -1,3 +1,4 @@
+import os
 from typing import Any
 
 from grantscout.models.schemas import SearchResult
@@ -22,7 +23,7 @@ class CrossEncoderReranker:
             raise RerankerError(
                 "Reranking requires optional dependencies; run pip install -e '.[retrieval]'"
             ) from error
-        resolved_device = None if self.device == "auto" else self.device
+        resolved_device = os.getenv("GRANTSCOUT_RERANKER_DEVICE") or (None if self.device == "auto" else self.device)
         self._model = CrossEncoder(self.model_name, device=resolved_device)
         return self._model
 

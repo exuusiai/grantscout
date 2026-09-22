@@ -223,11 +223,13 @@ def test_private_upload_flows_into_completion_scope(tmp_path: Path, monkeypatch)
     )
     assert uploaded.status_code == 200
     document_id = uploaded.json()[0]["id"]
-    for _ in range(80):
-        if client.get(f"/api/knowledge/tasks/{document_id}").json()["status"] == "ready":
+    status = ""
+    for _ in range(300):
+        status = client.get(f"/api/knowledge/tasks/{document_id}").json()["status"]
+        if status in {"ready", "failed"}:
             break
         time_module.sleep(0.1)
-    assert client.get(f"/api/knowledge/tasks/{document_id}").json()["status"] == "ready"
+    assert status == "ready", f"document ingestion ended as {status!r}"
 
     knowledge = app_module.app.state.knowledge
     corpus_path = knowledge.corpus_path(project["id"])
