@@ -1,8 +1,18 @@
 # GrantScout
 
+[![Tests](https://github.com/exuusiai/grantscout/actions/workflows/test.yml/badge.svg)](https://github.com/exuusiai/grantscout/actions/workflows/test.yml)
+![Python](https://img.shields.io/badge/python-3.12%2B-blue)
+![Retrieval](https://img.shields.io/badge/retrieval-BM25%20%2B%20BGE--M3-green)
+
+**证据驱动的科研文献调研 Agent 与立项本子撰写平台**（FastAPI · Agentic RAG · 本地 vLLM 推理）。
+
 GrantScout（原 PaperScout）是一个面向 AI 研究与技术调研的开源论文研究 Agent，并已扩展为**立项本子撰写平台**：它不仅搜索和总结论文，还会围绕研究任务、数据集、指标、模型规模、训练预算与实验条件判断论文是否真正可比，并将结论、原始证据和引用关系保存在可追溯的研究状态中。
 
 项目的目标不是替代论文阅读，而是减少检索、筛选、条件核对和研究决策中的重复工作，尤其避免把“实验条件不同”误判为“论文结论冲突”。
+
+| 三栏研究工作台（对话 · 证据 · 报告） | 立项本子工作台（分节正文 · 引用 · 字数预算） |
+|:---:|:---:|
+| ![研究工作台](docs/assets/workspace.png) | ![立项本子工作台](docs/assets/proposal-detail.png) |
 
 ## 项目亮点
 
